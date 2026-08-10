@@ -1,0 +1,48 @@
+# json-notes
+
+> A free, open-source, browser-only tool for documenting an undocumented JSON API. You
+> drop in a sample response and write down what each field means, key by key. It is not a
+> JSON viewer or a schema generator — the point is the notes you author and keep.
+
+Use it when a third party ships an API whose documentation does not match the payload,
+and you have to work out the meaning of several hundred fields by reading a sample.
+
+## What it does
+
+- Renders a payload as a tree and lets you write a note against **any** key, including
+  container keys, so a whole section can be described at its root.
+- Three marks per key: `*` interesting, `?` open question, `–` ignore. Marking a
+  container `–` settles everything beneath it, so a block of 50 unused fields is
+  dismissed in one click.
+- Tracks progress as `N keys · N marked · N untriaged` over unique paths, so you can tell
+  how much of a payload you have actually read.
+- Filtering to `?` gives you the list of questions to send back to the vendor — for an
+  undocumented API, that list is half the output.
+- Writing `@some-feature` in a note links that key to something you need to build. A
+  coverage view rolls those up as **missing** (nothing linked), **unresolved** (a linked
+  key is still a question), or **covered**.
+- Annotations are keyed by a normalized path with array indices collapsed
+  (`authorships[].institutions[].ror`), so a repeated record is documented once rather
+  than per item — and notes reattach when you load a newer sample of the same endpoint.
+- Full keyboard control; search matches keys, paths and values and jumps to a match in
+  its surrounding context.
+
+## Privacy
+
+Runs entirely in the browser. Payloads and notes live in IndexedDB and are never
+transmitted; the app ships a `connect-src 'none'` Content-Security-Policy, so network
+requests are blocked by the browser rather than merely avoided by convention. Relevant
+for payloads containing personal data.
+
+## Links
+
+- [App](https://christinitty-ditto.github.io/json-notes/app/): the tool itself
+- [Sample payload](https://christinitty-ditto.github.io/json-notes/app/?demo): opens with a real OpenAlex API response (559 unique paths)
+- [Source](https://github.com/christinitty-ditto/json-notes): MIT licensed
+- [Scope](https://github.com/christinitty-ditto/json-notes/blob/main/SCOPE.md): the design, and what is deliberately left out
+
+## Not
+
+Not a JSON viewer, formatter, graph visualiser, schema generator, or OpenAPI converter.
+Those tell you a payload's structure. This is for recording its meaning, which no tool
+can infer for you.

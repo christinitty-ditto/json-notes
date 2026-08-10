@@ -61,6 +61,10 @@ await Bun.write(
   join(DIST, "robots.txt"),
   `User-agent: *\nAllow: /\n\nSitemap: ${BASE}/sitemap.xml\n`,
 );
+
+// AI *search* crawlers overwhelmingly ignore llms.txt, but IDE agents (Cursor, Claude
+// Code, Copilot) and MCP servers do fetch it — and those are this tool's users.
+await Bun.write(join(DIST, "llms.txt"), await Bun.file(join(ROOT, "site", "llms.txt")).text());
 const today = new Date().toISOString().slice(0, 10);
 await Bun.write(
   join(DIST, "sitemap.xml"),
