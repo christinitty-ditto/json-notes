@@ -1,0 +1,27 @@
+{
+  "name": "json-notes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "json-notes": "./server.ts" },
+  "scripts": {
+    "dev": "bun --hot server.ts",
+    "build": "bun scripts/build.ts",
+    "preview": "bun scripts/preview.ts",
+    "start": "NODE_ENV=production bun server.ts",
+    "icons": "bun scripts/gen-icons.ts",
+    "agent": "bun scripts/launch-agent.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-virtual": "^3.13.12",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.14",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.8.0"
+  }
+}

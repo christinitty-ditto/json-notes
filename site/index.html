@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>json-notes — annotate and document undocumented JSON API responses</title>
+    <meta
+      name="description"
+      content="A free, open-source tool for documenting undocumented JSON APIs. Write down what every field of a response means, record the questions you still have, and see whether the payload covers what you need to build. Runs entirely in your browser."
+    />
+    <link rel="canonical" href="__BASE__/" />
+    <meta name="theme-color" content="#16171a" />
+    <link rel="icon" href="app/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="app/icon-192.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="__BASE__/" />
+    <meta property="og:title" content="json-notes — annotate undocumented JSON API responses" />
+    <meta
+      property="og:description"
+      content="Document a 1,000-key API response field by field. Record what each one means, and the questions you still need answered."
+    />
+    <meta property="og:image" content="__BASE__/app/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="json-notes — annotate undocumented JSON API responses" />
+    <meta
+      name="twitter:description"
+      content="Document a 1,000-key API response field by field. Record what each one means, and the questions you still need answered."
+    />
+    <meta name="twitter:image" content="__BASE__/app/icon-512.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "json-notes",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any (web browser)",
+        "url": "__BASE__/",
+        "description": "A tool for documenting undocumented JSON API responses. Record what every field of a large payload means, mark the ones you still have questions about, and check whether the payload covers what you need to build. Runs entirely in the browser; no data is uploaded.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "license": "https://opensource.org/licenses/MIT",
+        "isAccessibleForFree": true
+      }
+    </script>
+
+    <style>
+      :root {
+        --bg: #fbfbfa; --panel: #fff; --line: #e6e5e2; --fg: #1e1f1c; --dim: #74766f;
+        --key: #1f4b6e; --str: #2d6b3f; --num: #8a4b1a; --nullc: #a3a5a1;
+        --int: #b8860b; --qst: #1d6fa5; --ign: #9a9a9a; --warn: #b0342c;
+        --sel: #eef3f8; --glow: rgba(29,111,165,.10);
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #131417; --panel: #1a1c20; --line: #2a2d33; --fg: #dcdee2; --dim: #868a93;
+          --key: #7fb2d9; --str: #8fc79a; --num: #d6a06a; --nullc: #6b6f76;
+          --int: #d9b45a; --qst: #6cb0e0; --ign: #676b72; --warn: #e0736a;
+          --sel: #22262d; --glow: rgba(108,176,224,.10);
+        }
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0; background: var(--bg); color: var(--fg);
+        font: 14px/1.6 var(--mono); -webkit-font-smoothing: antialiased;
+      }
+      a { color: inherit; }
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+
+      nav {
+        display: flex; align-items: center; gap: 14px;
+        padding: 18px 0; font-size: 13px;
+      }
+      nav .brand { font-weight: 600; }
+      nav .spacer { flex: 1; }
+      nav a { color: var(--dim); text-decoration: none; }
+      nav a:hover { color: var(--fg); }
+
+      .hero { padding: 46px 0 30px; text-align: center; }
+      h1 {
+        font-size: clamp(28px, 5vw, 44px); line-height: 1.15;
+        margin: 0 0 16px; letter-spacing: -1px; font-weight: 600;
+      }
+      h1 .fade { color: var(--dim); }
+      .sub { color: var(--dim); font-size: 16px; margin: 0 auto 28px; max-width: 46ch; }
+      .cta { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+      .btn {
+        display: inline-block; padding: 11px 22px; border-radius: 8px;
+        border: 1px solid var(--fg); background: var(--fg); color: var(--bg);
+        text-decoration: none; font-weight: 600; font-size: 14px;
+      }
+      .btn:hover { opacity: .86; }
+      .btn.ghost { background: none; color: var(--fg); border-color: var(--line); font-weight: 400; }
+      .btn.ghost:hover { border-color: var(--dim); opacity: 1; }
+      .micro { color: var(--dim); font-size: 12px; margin-top: 14px; }
+
+      /* ---- app mock ---- */
+      .shot {
+        border: 1px solid var(--line); border-radius: 11px; overflow: hidden;
+        background: var(--panel); box-shadow: 0 18px 50px -22px rgba(0,0,0,.4);
+        margin: 34px 0 0; font-size: 12.5px;
+      }
+      .shot.sm { margin: 0; box-shadow: none; border-radius: 8px; }
+      .bar {
+        display: flex; align-items: center; gap: 7px; padding: 7px 11px;
+        border-bottom: 1px solid var(--line); background: var(--bg); color: var(--dim);
+        font-size: 11.5px; overflow: hidden; white-space: nowrap;
+      }
+      .pill {
+        padding: 3px 9px; border-radius: 5px 5px 0 0; margin-bottom: -8px;
+        border: 1px solid transparent;
+      }
+      .pill.on { background: var(--panel); border-color: var(--line); color: var(--fg); }
+      .cnt { padding: 0 5px; border-radius: 8px; background: var(--line); font-size: 10px; }
+      .grow { flex: 1; }
+      .chip {
+        border: 1px solid var(--line); border-radius: 4px; padding: 1px 8px;
+      }
+      .chip.on { background: var(--sel); color: var(--fg); border-color: var(--dim); }
+      .body { padding: 7px 0; }
+      .r { display: flex; align-items: baseline; gap: 6px; padding: 1.5px 12px; white-space: nowrap; }
+      .r.hl { background: var(--sel); box-shadow: inset 2px 0 0 var(--qst); }
+      .r.i { box-shadow: inset 2px 0 0 var(--int); }
+      .r.q { box-shadow: inset 2px 0 0 var(--qst); }
+      .r.x { box-shadow: inset 2px 0 0 var(--ign); opacity: .45; }
+      .r.faded { opacity: .38; }
+      .ind { display: inline-block; }
+      .k { color: var(--key); }
+      .s { color: var(--str); }
+      .n { color: var(--num); }
+      .z { color: var(--nullc); font-style: italic; }
+      .zs { color: var(--nullc); }
+      .lit { color: var(--warn); }
+      .d { color: var(--dim); }
+      .mk { color: var(--dim); letter-spacing: 2px; font-size: 11px; }
+      .note { color: var(--int); border-left: 1px solid var(--line); padding-left: 8px; }
+      .note.qq { color: var(--qst); }
+      .more {
+        display: inline-block; border: 1px dashed var(--line); border-radius: 4px;
+        padding: 0 8px; color: var(--dim); font-size: 11px;
+      }
+      .foot {
+        display: flex; gap: 12px; padding: 5px 12px; border-top: 1px solid var(--line);
+        color: var(--dim); font-size: 11px; background: var(--bg); flex-wrap: wrap;
+      }
+      .foot b { color: var(--fg); font-weight: 600; }
+      .u-i { box-shadow: inset 0 -2px 0 var(--int); padding: 0 2px; }
+      .u-q { box-shadow: inset 0 -2px 0 var(--qst); padding: 0 2px; }
+      .u-x { box-shadow: inset 0 -2px 0 var(--ign); padding: 0 2px; }
+
+      /* ---- feature grid ---- */
+      .grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 26px; margin: 70px 0 0;
+      }
+      .cell h2 {
+        font-size: 13px; margin: 0 0 4px; font-weight: 600; letter-spacing: -.1px;
+      }
+      .cell p { color: var(--dim); margin: 0 0 12px; font-size: 12.5px; }
+
+      .status { display: flex; align-items: center; gap: 8px; padding: 3px 12px; }
+      .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+      .d-m { background: var(--warn); } .d-u { background: var(--qst); } .d-c { background: var(--str); }
+      .tag { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; }
+      .t-m { color: var(--warn); } .t-u { color: var(--qst); } .t-c { color: var(--str); }
+
+      .kbd {
+        display: inline-block; min-width: 20px; text-align: center; padding: 1px 6px;
+        border: 1px solid var(--line); border-radius: 4px; background: var(--bg);
+        color: var(--fg); font-size: 11px;
+      }
+      .keys { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; }
+
+      .privacy {
+        margin: 76px 0 0; padding: 30px; border: 1px solid var(--line);
+        border-radius: 11px; background: var(--panel); text-align: center;
+      }
+      .privacy h2 { font-size: 19px; margin: 0 0 8px; font-weight: 600; letter-spacing: -.3px; }
+      .privacy p { color: var(--dim); margin: 0 auto; max-width: 54ch; font-size: 13px; }
+      .term {
+        display: inline-block; margin-top: 18px; text-align: left; padding: 10px 16px;
+        border-radius: 7px; background: var(--bg); border: 1px solid var(--line);
+        font-size: 12px; color: var(--dim);
+      }
+      .term .ok { color: var(--str); } .term .no { color: var(--warn); }
+
+      footer {
+        margin-top: 70px; padding: 24px 0 56px; border-top: 1px solid var(--line);
+        color: var(--dim); font-size: 12px; display: flex; gap: 14px; flex-wrap: wrap;
+      }
+      footer a { color: var(--dim); }
+      footer a:hover { color: var(--fg); }
+      @media (max-width: 620px) {
+        .shot { font-size: 11px; }
+        .r { padding-left: 8px; padding-right: 8px; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <nav>
+        <span class="brand">json-notes</span>
+        <span class="spacer"></span>
+        <a href="https://github.com/christinitty-ditto/json-notes">GitHub</a>
+        <a href="app/">Open</a>
+      </nav>
+
+      <header class="hero">
+        <h1>Undocumented API?<br /><span class="fade">Document it, field by field.</span></h1>
+        <p class="sub">
+          Turn a raw JSON response into a record of what every field actually means —
+          including the ones you still have questions about.
+        </p>
+        <div class="cta">
+          <a class="btn" href="app/?demo">Try it with a sample</a>
+          <a class="btn ghost" href="app/">Open the app</a>
+        </div>
+        <p class="micro">Free · open source · runs entirely in your browser</p>
+      </header>
+
+      <!-- The product, shown rather than described. -->
+      <div class="shot">
+        <div class="bar">
+          <span class="pill on">openalex-work <span class="cnt">521</span></span>
+          <span class="pill">crossref-work <span class="cnt">208</span></span>
+          <span class="pill">+</span>
+          <span class="grow"></span>
+          <span class="pill">features <span class="cnt">3</span></span>
+        </div>
+        <div class="bar">
+          <span><b style="color:var(--fg)">559</b> keys · <b style="color:var(--fg)">38</b> marked · <b style="color:var(--fg)">521</b> untriaged</span>
+          <span class="chip on">all</span><span class="chip">untriaged</span>
+          <span class="chip">*</span><span class="chip">?</span>
+        </div>
+        <div class="body">
+          <div class="r i"><span class="k">display_name</span><span class="d">:</span> <span class="s">"The state of OA: a large-scale analysis…"</span> <span class="mk">* ? –</span> <span class="note">the title @citation-row</span></div>
+          <div class="r"><span class="k">publication_year</span><span class="d">:</span> <span class="n">2018</span></div>
+          <div class="r q"><span class="k">fwci</span><span class="d">:</span> <span class="n">544.7065</span> <span class="mk">* ? –</span> <span class="note qq">field-weighted citation impact? scale?</span></div>
+          <div class="r"><span class="k">is_paratext</span><span class="d">:</span> <span class="n">false</span></div>
+          <div class="r"><span class="k">is_retracted</span><span class="d">:</span> <span class="n">false</span></div>
+          <div class="r q"><span class="d">▸</span> <span class="k">primary_location</span> <span class="d">{ }</span> <span class="mk">* ? –</span> <span class="note qq">vs best_oa_location vs locations[] — which is canonical?</span></div>
+          <div class="r"><span class="d">▾</span> <span class="k">authorships</span> <span class="d">[ ]</span></div>
+          <div class="r"><span class="ind" style="width:16px"></span><span class="d">▾</span> <span class="k">[0]</span> <span class="d">{ }</span></div>
+          <div class="r i"><span class="ind" style="width:34px"></span><span class="k">author_position</span><span class="d">:</span> <span class="s">"first"</span> <span class="mk">* ? –</span> <span class="note">first | middle | last</span></div>
+          <div class="r"><span class="ind" style="width:34px"></span><span class="d">▾</span> <span class="k">institutions</span> <span class="d">[ ]</span></div>
+          <div class="r q"><span class="ind" style="width:52px"></span><span class="k">ror</span><span class="d">:</span> <span class="s">"https://ror.org/0293rh114"</span> <span class="mk">* ? –</span> <span class="note qq">Research Organization Registry id — stable?</span></div>
+          <div class="r"><span class="ind" style="width:34px"></span><span class="k">raw_affiliation_string</span><span class="d">:</span> <span class="zs">""</span></div>
+          <div class="r"><span class="ind" style="width:16px"></span><span class="more">+ 8 more items</span></div>
+          <div class="r x"><span class="d">▸</span> <span class="k">abstract_inverted_index</span> <span class="d">{ }</span> <span class="mk">* ? –</span> <span class="note" style="color:var(--ign)">word → positions, not text — 167 keys dismissed</span></div>
+        </div>
+        <div class="foot">
+          <span><b class="u-i">i</b> interesting <b class="u-q">q</b> question <b class="u-x">x</b> ignore</span>
+          <span><b>j k</b> move</span><span><b>h l</b> fold</span>
+          <span><b>⏎</b> note</span><span><b>/</b> search</span>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="cell">
+          <h2>One click settles a whole section</h2>
+          <p>Ignore a container and everything inside it stops counting.</p>
+          <div class="shot sm">
+            <div class="body">
+              <div class="r x"><span class="d">▾</span> <span class="k">abstract_inverted_index</span> <span class="d">{ }</span> <span class="mk">* ? –</span></div>
+              <div class="r faded"><span class="ind" style="width:16px"></span><span class="k">"Despite"</span><span class="d">:</span> <span class="s">[0]</span> <span class="d">–</span></div>
+              <div class="r faded"><span class="ind" style="width:16px"></span><span class="k">"growing"</span><span class="d">:</span> <span class="s">[1]</span> <span class="d">–</span></div>
+              <div class="r faded"><span class="ind" style="width:16px"></span><span class="k">"interest"</span><span class="d">:</span> <span class="s">[2]</span> <span class="d">–</span></div>
+            </div>
+            <div class="foot"><span>untriaged <b>559</b> → <b style="color:var(--str)">392</b></span></div>
+          </div>
+        </div>
+
+        <div class="cell">
+          <h2>Half the output is questions</h2>
+          <p>Filter to <span class="k">?</span> and you have the list to send the vendor.</p>
+          <div class="shot sm">
+            <div class="bar" style="border-bottom:1px solid var(--line)">
+              <span class="chip">all</span><span class="chip">untriaged</span>
+              <span class="chip">*</span><span class="chip on">?</span>
+            </div>
+            <div class="body">
+              <div class="r q"><span class="k">fwci</span> <span class="note qq">what scale? no unit given</span></div>
+              <div class="r q"><span class="k">primary_location</span> <span class="note qq">vs best_oa_location — canonical?</span></div>
+              <div class="r q"><span class="k">institutions[].ror</span> <span class="note qq">stable identifier we can key on?</span></div>
+              <div class="r q"><span class="k">apc_paid</span> <span class="note qq">who paid — author or funder?</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cell">
+          <h2>Can I build it with this?</h2>
+          <p>Tag keys with <span class="k">@feature</span> and see where you stand.</p>
+          <div class="shot sm">
+            <div class="body">
+              <div class="status"><span class="dot d-m"></span><span class="tag t-m">missing</span> <span class="k">@retraction-notice</span></div>
+              <div class="status"><span class="dot d-u"></span><span class="tag t-u">unresolved</span> <span class="k">@canonical-pdf-link</span></div>
+              <div class="status"><span class="dot d-c"></span><span class="tag t-c">covered</span> <span class="k">@citation-row</span></div>
+              <div class="status"><span class="dot d-c"></span><span class="tag t-c">covered</span> <span class="k">@author-list</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cell">
+          <h2>Describe the shape, not every copy</h2>
+          <p>Nine repeated records are one thing to document, not nine.</p>
+          <div class="shot sm">
+            <div class="body">
+              <div class="r"><span class="d">authorships</span><span class="lit">[0]</span><span class="d">.institutions</span><span class="lit">[2]</span><span class="d">.ror</span></div>
+              <div class="r"><span class="d">↓</span></div>
+              <div class="r"><span class="k">authorships</span><span class="s">[]</span><span class="k">.institutions</span><span class="s">[]</span><span class="k">.ror</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cell">
+          <h2>Never leave the keyboard</h2>
+          <p>Sweep a thousand keys without reaching for the mouse.</p>
+          <div class="shot sm">
+            <div class="keys">
+              <span class="kbd">j</span><span class="kbd">k</span><span class="kbd">h</span><span class="kbd">l</span>
+              <span class="kbd">i</span><span class="kbd">q</span><span class="kbd">x</span>
+              <span class="kbd">⏎</span><span class="kbd">y</span><span class="kbd">/</span>
+              <span class="kbd">g</span><span class="kbd">G</span><span class="kbd">[</span><span class="kbd">]</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cell">
+          <h2>Built for the big ones</h2>
+          <p>A 1,150-key payload stays instant — ~50 rows ever reach the DOM.</p>
+          <div class="shot sm">
+            <div class="body">
+              <div class="r"><span class="d">payload</span> <span class="n">1,150 keys</span></div>
+              <div class="r"><span class="d">in the DOM</span> <span class="s">54 rows</span></div>
+              <div class="r"><span class="d">per keystroke</span> <span class="s">0.17 ms</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section class="privacy">
+        <h2>Your payloads never leave the browser</h2>
+        <p>
+          There is no server. The app ships a policy that blocks network requests
+          outright — check it yourself in devtools.
+        </p>
+        <div class="term">
+          <span class="d">&gt;</span> fetch('https://example.com')<br />
+          <span class="no">✗ Refused to connect — Content-Security-Policy: connect-src 'none'</span><br />
+          <span class="d">&gt;</span> indexedDB.databases()<br />
+          <span class="ok">✓ [{ name: 'json-notes' }]</span>
+        </div>
+      </section>
+
+      <footer>
+        <span>MIT licensed</span>
+        <a href="https://github.com/christinitty-ditto/json-notes">Source</a>
+        <a href="app/">Open the app</a>
+        <span class="grow"></span>
+        <span>For anyone whose API documentation does not match the payload.</span>
+      </footer>
+    </div>
+    <!--__ANALYTICS__-->
+  </body>
+</html>

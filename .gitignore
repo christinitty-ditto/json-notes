@@ -1,0 +1,7 @@
+node_modules
+dist
+.bun-cache
+
+# local scratch from the old file-backed workspace
+*.notes.yaml
+features.yaml

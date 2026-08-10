@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>json-notes</title>
+    <!--
+      The app must not be able to talk to anyone. connect-src 'none' blocks fetch, XHR
+      and WebSockets outright, so "your payloads never leave the browser" is enforced by
+      the page rather than merely promised — anyone can confirm it in devtools.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none';
+               script-src 'self';
+               style-src 'self' 'unsafe-inline';
+               img-src 'self' data:;
+               font-src 'self';
+               connect-src 'none';
+               manifest-src 'self';
+               worker-src 'self';
+               base-uri 'none';
+               form-action 'none';
+               frame-ancestors 'none'"
+    />
+    <!-- manifest/icon links are injected at runtime in src/index.tsx: bun's HTML
+         bundler tries to resolve link hrefs as build inputs, and these are served
+         by the server at fixed paths instead. -->
+    <meta name="theme-color" content="#16171a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/index.tsx"></script>
+  </body>
+</html>
