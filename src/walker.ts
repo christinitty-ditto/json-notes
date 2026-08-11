@@ -10,9 +10,9 @@ function kindOf(v: unknown): Kind {
  * Walk a payload into a flat node array.
  *
  * Path rules — array indices never appear:
- *   response.policyData          the array itself
- *   response.policyData[]        any item of it
- *   response.policyData[].Tenure any item's key
+ *   authorships                        the array itself
+ *   authorships[]                      any item of it
+ *   authorships[].institutions[].ror   any item's key
  */
 export function buildDoc(name: string, file: string, json: unknown): Doc {
   const nodes: JNode[] = [];
@@ -146,18 +146,52 @@ export function inheritsIgnore(doc: Doc, path: string, notes: Notes): boolean {
   return false;
 }
 
+/**
+ * Container paths that something below them has been annotated on.
+ *
+ * Writing a note against `Members[].Relation` says you have been inside `Members`, so
+ * leaving `Members` itself sitting in the untriaged count is noise you cannot clear
+ * without marking containers you have nothing to say about. Rolls up the whole ancestor
+ * chain, not just the immediate parent.
+ *
+ * Derived, never stored — the same shape as `-` inheritance, and it disappears the
+ * moment the annotation underneath it does. Paths held over from a payload that no
+ * longer contains them have no ancestors here and credit nothing.
+ */
+export function rolledUpTriage(doc: Doc, notes: Notes): Set<string> {
+  const out = new Set<string>();
+  for (const path in notes) {
+    const e = notes[path]!;
+    if (!e.mark && !e.note) continue;
+    for (const a of doc.ancestorPaths.get(path) ?? []) out.add(a);
+  }
+  return out;
+}
+
+/**
+ * Nothing said about it, nothing said below it, and no `-` above it.
+ *
+ * The header count and the `untriaged` filter both go through here so the number and
+ * the rows you are shown cannot disagree.
+ */
+export function isUntriaged(doc: Doc, path: string, notes: Notes, rolled: Set<string>): boolean {
+  const e = notes[path];
+  if (e?.mark || e?.note) return false;
+  if (rolled.has(path)) return false;
+  return !inheritsIgnore(doc, path, notes);
+}
+
 export type Counts = { total: number; marked: number; untriaged: number };
 
 /** Counts are over unique normalized paths — the documentation unit, not rendered rows. */
-export function countPaths(doc: Doc, notes: Notes): Counts {
+export function countPaths(doc: Doc, notes: Notes, rolled: Set<string>): Counts {
   let marked = 0;
   let untriaged = 0;
   for (const path of doc.pathIndex.keys()) {
-    if (notes[path]?.mark) {
-      marked++;
-    } else if (!inheritsIgnore(doc, path, notes)) {
-      untriaged++;
-    }
+    // `marked` stays literal — explicit marks only. It was never the complement of
+    // untriaged: a row settled by an ancestor's `-` is neither.
+    if (notes[path]?.mark) marked++;
+    else if (isUntriaged(doc, path, notes, rolled)) untriaged++;
   }
   return { total: doc.pathIndex.size, marked, untriaged };
 }

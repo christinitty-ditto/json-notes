@@ -48,6 +48,7 @@ type RowProps = {
   entry: Entry | undefined;
   editing: boolean;
   cursor: boolean;
+  selected: boolean;
   featureIds: string[];
   onToggle: (headId: number) => void;
   onExpandArray: (arrayId: number) => void;
@@ -56,6 +57,7 @@ type RowProps = {
   onEdit: (path: string | null) => void;
   onCopy: (path: string) => void;
   onCursor: (index: number) => void;
+  onSelect: (index: number, extend: boolean) => void;
 };
 
 const RowView = memo(function RowView({
@@ -64,6 +66,7 @@ const RowView = memo(function RowView({
   entry,
   editing,
   cursor,
+  selected,
   featureIds,
   onToggle,
   onExpandArray,
@@ -72,6 +75,7 @@ const RowView = memo(function RowView({
   onEdit,
   onCopy,
   onCursor,
+  onSelect,
 }: RowProps) {
   if (row.more) {
     return (
@@ -94,13 +98,26 @@ const RowView = memo(function RowView({
     dim ? "dim" : "",
     mark ? `m-${mark}` : "",
     row.inheritedIgnore && !mark ? "inherited" : "",
+    selected ? "sel" : "",
     cursor ? "cur" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <div className={cls} onMouseDown={() => onCursor(index)}>
+    <div
+      className={cls}
+      onMouseDown={(e) => {
+        // Shift-click extends from wherever the cursor is, so a run of keys is two
+        // clicks rather than one per row.
+        if (e.shiftKey) {
+          e.preventDefault();
+          onSelect(index, true);
+        } else {
+          onCursor(index);
+        }
+      }}
+    >
       <div className="row-main" style={{ paddingLeft: row.depth * 14 }}>
         <span className="caret" onClick={() => row.hasChildren && onToggle(row.headId)}>
           {row.hasChildren ? (row.expanded ? "▾" : "▸") : ""}
@@ -125,6 +142,13 @@ const RowView = memo(function RowView({
         )}
 
         <span className="marks">
+          <button
+            className={`mk sel-box${selected ? " on" : ""}`}
+            title="select — mark or note this together with everything else selected (space)"
+            onClick={() => onSelect(index, false)}
+          >
+            {selected ? "☑" : "☐"}
+          </button>
           {MARKS.map(({ m, glyph, title }) => (
             <button
               key={m}
@@ -141,6 +165,12 @@ const RowView = memo(function RowView({
         </span>
 
         {row.inheritedIgnore && !mark && <span className="inh" title="ignored by a parent">–</span>}
+
+        {row.rolledTriage && (
+          <span className="rolled" title="settled by an annotation below it — nothing said about this key itself">
+            ·
+          </span>
+        )}
 
         {!editing && entry?.note && (
           <span className="note" onClick={() => onEdit(row.path)}>
@@ -168,6 +198,7 @@ type Props = {
   notes: Record<string, Entry>;
   editing: string | null;
   cursor: number;
+  selected: Set<string>;
   featureIds: string[];
   onToggle: (headId: number) => void;
   onExpandArray: (arrayId: number) => void;
@@ -176,6 +207,7 @@ type Props = {
   onEdit: (path: string | null) => void;
   onCopy: (path: string) => void;
   onCursor: (index: number) => void;
+  onSelect: (index: number, extend: boolean) => void;
 };
 
 export function TreeView({
@@ -183,6 +215,7 @@ export function TreeView({
   notes,
   editing,
   cursor,
+  selected,
   featureIds,
   onToggle,
   onExpandArray,
@@ -191,13 +224,16 @@ export function TreeView({
   onEdit,
   onCopy,
   onCursor,
+  onSelect,
 }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const virt = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: useCallback(() => 22, []),
+    // First guess only — rows are measured for real, since expanded values and open
+    // note editors vary in height. Tracks the base font size.
+    estimateSize: useCallback(() => 25, []),
     overscan: 18,
     getItemKey: useCallback((i: number) => rows[i]?.key ?? i, [rows]),
   });
@@ -247,6 +283,7 @@ export function TreeView({
                 entry={notes[row.path]}
                 editing={isEditing}
                 cursor={vi.index === cursor}
+                selected={!row.more && selected.has(row.path)}
                 featureIds={featureIds}
                 onToggle={onToggle}
                 onExpandArray={onExpandArray}
@@ -255,6 +292,7 @@ export function TreeView({
                 onEdit={onEdit}
                 onCopy={onCopy}
                 onCursor={onCursor}
+                onSelect={onSelect}
               />
             </div>
           );

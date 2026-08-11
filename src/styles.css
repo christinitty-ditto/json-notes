@@ -14,6 +14,14 @@
   --qst: #1d6fa5;
   --ign: #9a9a9a;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* One knob for the whole UI. It was 12px, which is too small to sit in front of for
+     an afternoon; 14px keeps a large tree dense while staying readable. Raise --fs
+     and everything else follows — the smaller sizes are steps off it, not fixed values. */
+  --fs: 14px;
+  --fs-sm: 12px;
+  --fs-xs: 11px;
+  --fs-lg: 16px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,7 +49,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 12px/1.5 var(--mono);
+  font: var(--fs)/1.55 var(--mono);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -55,7 +63,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .boot .broken { color: var(--warn); }
 .broken-bar {
   flex: none; padding: 5px 12px; background: var(--warn);
-  color: #fff; font-size: 11px;
+  color: #fff; font-size: var(--fs-sm);
 }
 
 /* ---- tabs ---- */
@@ -80,7 +88,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .tab-label { border: none; background: none; padding: 0; cursor: pointer; color: inherit; }
 .tab-x {
   border: none; background: none; padding: 0 1px; cursor: pointer;
-  color: var(--dim); opacity: 0; font-size: 10px;
+  color: var(--dim); opacity: 0; font-size: var(--fs-xs);
 }
 .tab:hover .tab-x { opacity: .7; }
 .tab-x:hover { opacity: 1; color: var(--warn); }
@@ -92,7 +100,7 @@ button, input, textarea { font: inherit; color: inherit; }
   max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tab-add {
-  padding: 5px 10px; font-size: 14px; line-height: 1;
+  padding: 5px 10px; font-size: var(--fs-lg); line-height: 1;
   border: 1px dashed var(--line); border-bottom: none; flex: none;
 }
 .tab-add:hover { color: var(--fg); border-color: var(--dim); }
@@ -104,10 +112,25 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 .tool:hover { color: var(--fg); border-color: var(--line); }
 .tool.on { color: var(--fg); border-color: var(--dim); background: var(--sel); }
+/* The one tool that has to be seen without hunting for it. */
+.tool.export { color: var(--fg); border-color: var(--line); background: var(--panel); }
+.tool.export:hover { border-color: var(--dim); background: var(--sel); }
+
+/* ---- persistence notice ---- */
+/* A band, not a modal: the question is worth reading but never worth blocking work for. */
+.persist {
+  display: flex; align-items: flex-start; gap: 14px; flex: none;
+  padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--panel);
+  box-shadow: inset 3px 0 0 var(--qst);
+}
+.persist.warn { box-shadow: inset 3px 0 0 var(--int); }
+.persist-body { flex: 1; min-width: 0; color: var(--dim); line-height: 1.55; max-width: 92ch; }
+.persist-body b { color: var(--fg); font-weight: 600; }
+.persist-acts { display: flex; gap: 6px; flex: none; padding-top: 1px; }
 
 /* ---- menu ---- */
 .menu-wrap { position: relative; }
-.menu-btn { font-size: 14px; line-height: 1; padding: 2px 8px; }
+.menu-btn { font-size: var(--fs-lg); line-height: 1; padding: 2px 8px; }
 .menu {
   position: absolute; right: 0; top: 100%; z-index: 60; min-width: 240px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
@@ -119,12 +142,12 @@ button, input, textarea { font: inherit; color: inherit; }
   color: var(--fg); cursor: pointer; text-align: left;
 }
 .menu-item:hover { background: var(--sel); }
-.menu-hint { color: var(--dim); font-size: 11px; }
+.menu-hint { color: var(--dim); font-size: var(--fs-sm); }
 .menu-sep { height: 1px; background: var(--line); margin: 3px 0; }
-.menu-note { padding: 6px 9px; color: var(--dim); font-size: 11px; line-height: 1.45; }
+.menu-note { padding: 6px 9px; color: var(--dim); font-size: var(--fs-sm); line-height: 1.45; }
 .badge {
   padding: 0 5px; border-radius: 8px; background: var(--line);
-  color: var(--dim); font-size: 10px;
+  color: var(--dim); font-size: var(--fs-xs);
 }
 .badge.done { background: transparent; color: var(--str); }
 
@@ -152,12 +175,52 @@ button, input, textarea { font: inherit; color: inherit; }
 .search:focus { outline: none; border-color: var(--qst); }
 .clear { border: none; background: none; color: var(--dim); cursor: pointer; }
 
+/* ---- feature strip ---- */
+/* What this payload is supposed to support, in front of you while you annotate rather
+   than a tab away. One line, scrolls sideways, never wraps the tree off the screen. */
+.fstrip {
+  display: flex; align-items: center; gap: 6px; flex: none;
+  padding: 5px 10px; border-bottom: 1px solid var(--line);
+  background: var(--bg); overflow-x: auto; scrollbar-width: none;
+}
+.fstrip::-webkit-scrollbar { display: none; }
+.fstrip-hint { color: var(--dim); opacity: .7; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  padding: 1px 8px; border: 1px solid var(--line); border-radius: 11px;
+  color: var(--dim); white-space: nowrap;
+}
+.chip.go { cursor: pointer; }
+.chip.go:hover { color: var(--fg); border-color: var(--dim); background: var(--sel); }
+.chip-n { color: var(--dim); opacity: .8; font-size: var(--fs-xs); }
+.chip-x {
+  border: none; background: none; padding: 0 0 0 2px; cursor: pointer;
+  color: var(--dim); opacity: 0; font-size: var(--fs-xs);
+}
+.chip:hover .chip-x { opacity: .7; }
+.chip-x:hover { opacity: 1; color: var(--warn); }
+.c-missing { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+.c-unresolved { color: var(--qst); border-color: color-mix(in srgb, var(--qst) 35%, var(--line)); }
+.c-covered { color: var(--str); border-color: color-mix(in srgb, var(--str) 35%, var(--line)); }
+.chip.pick { border-style: dashed; cursor: pointer; background: none; }
+.chip.pick:hover, .chip.pick.on { color: var(--fg); border-color: var(--dim); }
+.pickmenu { left: 0; right: auto; max-height: 60vh; overflow-y: auto; }
+.pick-h {
+  padding: 6px 9px 2px; color: var(--dim); font-size: var(--fs-xs);
+  text-transform: uppercase; letter-spacing: .09em;
+}
+.pick-row { justify-content: flex-start; gap: 7px; align-items: center; }
+.pick-row .menu-hint { margin-left: auto; }
+.pick-row.derived { cursor: default; opacity: .6; }
+.pick-row.derived:hover { background: none; }
+.pick-box { flex: none; color: var(--dim); }
+
 /* ---- breadcrumb ---- */
 .crumb {
   display: flex; gap: 12px; align-items: baseline;
   padding: 4px 10px; border-bottom: 1px solid var(--line);
-  background: var(--bg); font-size: 11px; flex: none;
-  height: 25px; overflow: hidden;
+  background: var(--bg); font-size: var(--fs-sm); flex: none;
+  height: 30px; overflow: hidden;
 }
 .crumb.empty { }
 .crumb-path { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -189,6 +252,15 @@ button, input, textarea { font: inherit; color: inherit; }
 .row.m-interesting { border-left-color: var(--int); }
 .row.m-question { border-left-color: var(--qst); }
 .row.m-ignore { border-left-color: var(--ign); }
+/* Selected rows keep their mark colour on the left edge; selection is the fill, so a
+   row can show both at once. */
+.row.sel { background: color-mix(in srgb, var(--qst) 11%, transparent); }
+.row.sel .marks { opacity: 1; }
+.row.sel.cur { background: color-mix(in srgb, var(--qst) 17%, transparent); }
+.sel-box { color: var(--dim); }
+.sel-box.on { color: var(--qst); border-color: transparent; background: none; }
+/* Settled by an annotation below it, not by anything said about the row itself. */
+.rolled { color: var(--dim); opacity: .5; flex: none; }
 
 .caret {
   width: 12px; flex: none; color: var(--dim);
@@ -216,13 +288,13 @@ button, input, textarea { font: inherit; color: inherit; }
 .row:hover .marks, .row.m-interesting .marks,
 .row.m-question .marks, .row.m-ignore .marks { opacity: 1; }
 .mk {
-  width: 17px; height: 16px; padding: 0; line-height: 1;
+  width: 19px; height: 18px; padding: 0; line-height: 1;
   border: 1px solid transparent; border-radius: 3px;
   background: none; color: var(--dim); cursor: pointer;
 }
 .mk:hover { border-color: var(--line); color: var(--fg); }
 .mk.on { color: var(--fg); border-color: var(--dim); background: var(--sel); }
-.cp { font-size: 10px; }
+.cp { font-size: var(--fs-xs); }
 .inh { color: var(--ign); flex: none; }
 
 .note {
@@ -280,16 +352,13 @@ button, input, textarea { font: inherit; color: inherit; }
 .fpanel code { color: var(--key); }
 .st {
   display: flex; align-items: baseline; gap: 8px;
-  font-size: 12px; text-transform: uppercase; letter-spacing: .09em;
+  font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: .09em;
   margin: 22px 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--line);
 }
-.st-missing { color: var(--warn); }
-.st-unresolved { color: var(--qst); }
-.st-covered { color: var(--str); }
 .st-n { color: var(--dim); }
 .st-blurb {
   margin-left: auto; text-transform: none; letter-spacing: 0;
-  color: var(--dim); font-size: 11px;
+  color: var(--dim); font-size: var(--fs-sm);
 }
 .feat { margin: 10px 0 16px; }
 .feat-head { display: flex; align-items: center; gap: 8px; }
@@ -316,12 +385,59 @@ button, input, textarea { font: inherit; color: inherit; }
   color: var(--dim); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
+.declare-row { display: flex; gap: 20px; flex-wrap: wrap; }
+.declare-row .add-feat { flex: 1; min-width: 300px; max-width: 460px; }
+.set-body { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 0 15px; }
+.set-members { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.set-members .chip { color: var(--key); }
+.set-applied { margin: 6px 0 0 15px; color: var(--dim); display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.add-member { display: flex; gap: 4px; }
+.add-member input {
+  width: 15ch; padding: 1px 8px; border: 1px dashed var(--line);
+  border-radius: 11px; background: none;
+}
+.add-member input:focus { outline: none; border-color: var(--qst); border-style: solid; }
+.add-member button {
+  padding: 1px 9px; border: 1px solid var(--line); border-radius: 11px;
+  background: none; color: var(--dim); cursor: pointer;
+}
+.add-member button:hover:not(:disabled) { color: var(--fg); border-color: var(--dim); }
+.add-member button:disabled { opacity: .35; cursor: default; }
+/* One block per payload the feature is applicable to — status has no meaning without one. */
+.feat-doc { margin: 6px 0 0 15px; }
+.feat-doc-head { display: flex; align-items: center; gap: 7px; }
+.feat-doc-st { color: var(--dim); }
+.feat-doc .hint { color: var(--dim); opacity: .75; }
+.feat-doc .feat-links { margin-left: 14px; }
+
+/* ---- selection bar ---- */
+/* Only present while something is selected, and it says what it will write and to how
+   many keys before you can write it. */
+.selbar {
+  flex: none; padding: 6px 10px; border-top: 1px solid var(--line);
+  background: var(--panel); box-shadow: inset 3px 0 0 var(--qst);
+}
+.selbar-row { display: flex; align-items: center; gap: 10px; color: var(--dim); }
+.selbar-row b { color: var(--fg); font-weight: 600; }
+.selbar-marks { display: flex; gap: 2px; }
+.selbar-btn {
+  padding: 1px 9px; border: 1px solid var(--line); border-radius: 4px;
+  background: none; color: var(--dim); cursor: pointer; white-space: nowrap;
+}
+.selbar-btn:hover { color: var(--fg); border-color: var(--dim); }
+.selbar-paths {
+  flex: 1; min-width: 0; color: var(--dim); opacity: .6;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: var(--fs-sm); text-align: right;
+}
+.selbar-warn { color: var(--int); padding: 5px 0 0; }
+.selbar .note-editor { padding-right: 0; }
 
 /* ---- key legend ---- */
 .legend {
   display: flex; gap: 14px; flex: none; overflow-x: auto;
   padding: 4px 10px; border-top: 1px solid var(--line);
-  background: var(--bg); color: var(--dim); font-size: 11px;
+  background: var(--bg); color: var(--dim); font-size: var(--fs-sm);
 }
 .legend span { white-space: nowrap; }
 .legend b { color: var(--fg); font-weight: 600; }
@@ -346,10 +462,10 @@ button, input, textarea { font: inherit; color: inherit; }
   padding: 30px 48px; border: 2px dashed var(--qst); border-radius: 12px;
   background: var(--panel); text-align: center;
 }
-.dropzone-title { font-size: 15px; color: var(--fg); }
-.dropzone-sub { margin-top: 6px; color: var(--dim); font-size: 11px; }
+.dropzone-title { font-size: 17px; color: var(--fg); }
+.dropzone-sub { margin-top: 6px; color: var(--dim); font-size: var(--fs-sm); }
 .empty-app { height: 100vh; max-width: 620px; }
-.empty-app h1 { font-size: 17px; font-weight: 600; color: var(--fg); margin: 0 0 6px; }
+.empty-app h1 { font-size: 19px; font-weight: 600; color: var(--fg); margin: 0 0 6px; }
 .empty-app .lede { color: var(--dim); margin-bottom: 22px; line-height: 1.6; }
 .empty-drop {
   border: 2px dashed var(--line); border-radius: 10px;
@@ -357,7 +473,7 @@ button, input, textarea { font: inherit; color: inherit; }
   color: var(--fg); transition: border-color .12s, background .12s;
 }
 .empty-drop:hover { border-color: var(--qst); background: var(--sel); }
-.empty-drop .hint { margin-top: 6px; font-size: 11px; }
+.empty-drop .hint { margin-top: 6px; font-size: var(--fs-sm); }
 .empty-plus { font-size: 26px; color: var(--dim); line-height: 1; margin-bottom: 10px; }
 .privacy { margin-top: 20px; line-height: 1.6; }
 .dim-path { opacity: .5; margin-top: 8px; }

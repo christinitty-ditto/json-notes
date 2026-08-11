@@ -18,9 +18,16 @@ and you have to work out the meaning of several hundred fields by reading a samp
   how much of a payload you have actually read.
 - Filtering to `?` gives you the list of questions to send back to the vendor — for an
   undocumented API, that list is half the output.
-- Writing `@some-feature` in a note links that key to something you need to build. A
-  coverage view rolls those up as **missing** (nothing linked), **unresolved** (a linked
-  key is still a question), or **covered**.
+- Annotating a key also settles the containers above it, all the way up — having written
+  something inside a section, you have plainly been in it, so it stops counting as
+  untriaged. Derived, never stored.
+- Several keys can be selected with `space` or shift-click and annotated together: one
+  mark, or **one note written to every one of them**.
+- Writing `@some-feature` in a note links that key to something you need to build.
+  Features can be grouped into named sets, and each payload is told which features and
+  sets apply to it. Status is then answered **per payload** — **missing** (applicable
+  here, nothing here links it), **unresolved** (a linked key here is still a question),
+  or **covered** — and shown as a strip of chips on that payload's tab, gaps first.
 - Annotations are keyed by a normalized path with array indices collapsed
   (`authorships[].institutions[].ror`), so a repeated record is documented once rather
   than per item — and notes reattach when you load a newer sample of the same endpoint.
@@ -33,6 +40,26 @@ Runs entirely in the browser. Payloads and notes live in IndexedDB and are never
 transmitted; the app ships a `connect-src 'none'` Content-Security-Policy, so network
 requests are blocked by the browser rather than merely avoided by convention. Relevant
 for payloads containing personal data.
+
+## Getting the notes out
+
+Browser storage does not mean the notes are stuck in one profile. The `↓ export` button
+in the toolbar writes a single JSON bundle holding every payload alongside all marks,
+notes and features — one file, so treat it as carrying whatever customer data the samples
+do. Dropping a bundle back on the window restores it, on any browser or machine, which is
+also how the field docs reach a teammate. Imports merge and existing annotations win, so
+restoring an older backup cannot clobber newer work; bundles carrying no payloads still
+import. Exports matter because browsers can evict site data under pressure — the reason
+the button is in the toolbar rather than in a menu.
+
+Persistent storage is the only permission requested, and it is asked once, after a
+payload of your own is open, with the reason attached — never on load. Refusing is
+supported: nothing stops working, the app distinguishes a refusal from the browser
+quietly declining (the permission state is read separately, since `persist()` returns
+only a boolean), and it does not ask again. The `⋯` menu reports storage usage, the
+current state, and keeps the explanation reachable.
+
+The bundle is JSON. There is no markdown, JSONC or spreadsheet export.
 
 ## Links
 

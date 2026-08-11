@@ -1,5 +1,5 @@
 import type { Doc, FilterMode, Kind, Notes } from "./types.ts";
-import { searchIndex } from "./walker.ts";
+import { isUntriaged, searchIndex } from "./walker.ts";
 
 export type Row = {
   key: string;
@@ -15,6 +15,8 @@ export type Row = {
   hasChildren: boolean;
   expanded: boolean;
   inheritedIgnore: boolean;
+  /** Settled only by an annotation below it — nothing has been said about this row. */
+  rolledTriage: boolean;
   arrayIndex: number;
   /** Set on the synthetic "+ N more" row that stands in for hidden array items. */
   more?: { arrayId: number; count: number };
@@ -32,11 +34,20 @@ export type BuildOpts = {
   notes: Notes;
   expanded: Set<number>;
   arrayExpanded: Set<number>;
+  /** Container paths carrying an annotation somewhere below — see rolledUpTriage. */
+  rolled: Set<string>;
   /** When present, filtering is active — see computeVisible. */
   visible: Visible | null;
 };
 
-export function buildRows({ doc, notes, expanded, arrayExpanded, visible }: BuildOpts): Row[] {
+export function buildRows({
+  doc,
+  notes,
+  expanded,
+  arrayExpanded,
+  rolled,
+  visible,
+}: BuildOpts): Row[] {
   const rows: Row[] = [];
   const { nodes, chains } = doc;
 
@@ -47,7 +58,8 @@ export function buildRows({ doc, notes, expanded, arrayExpanded, visible }: Buil
 
     if (visible && !visible.visible.has(tailId)) return;
 
-    const own = notes[tail.path]?.mark;
+    const entry = notes[tail.path];
+    const own = entry?.mark;
     // Ancestors and matched nodes open automatically so a match is always reachable
     // and a matched container shows what is inside it. Below a match, your own
     // collapse state applies, so a big subtree stays browsable rather than dumped.
@@ -67,6 +79,7 @@ export function buildRows({ doc, notes, expanded, arrayExpanded, visible }: Buil
       hasChildren,
       expanded: isExpanded,
       inheritedIgnore: inherited,
+      rolledTriage: !own && !entry?.note && !inherited && rolled.has(tail.path),
       arrayIndex: nodes[id]!.arrayIndex,
     });
 
@@ -96,6 +109,7 @@ export function buildRows({ doc, notes, expanded, arrayExpanded, visible }: Buil
           hasChildren: false,
           expanded: false,
           inheritedIgnore: nextInherited,
+          rolledTriage: false,
           arrayIndex: -1,
           more: { arrayId: tailId, count: items.length - 1 },
         });
@@ -122,6 +136,7 @@ export function computeVisible(
   notes: Notes,
   search: string,
   filter: FilterMode,
+  rolled: Set<string>,
 ): Visible | null {
   const q = search.trim().toLowerCase();
   if (!q && filter === "all") return null;
@@ -134,7 +149,7 @@ export function computeVisible(
     if (filter !== "all") {
       const mark = notes[n.path]?.mark;
       if (filter === "untriaged") {
-        if (mark) continue;
+        if (!isUntriaged(doc, n.path, notes, rolled)) continue;
       } else if (filter === "interesting") {
         if (mark !== "interesting") continue;
       } else if (filter === "question") {

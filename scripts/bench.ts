@@ -2,17 +2,14 @@
  * Times the hot paths against a real payload.
  *   bun scripts/bench.ts [payload.json]
  */
-import { homedir } from "node:os";
 import { join } from "node:path";
-import { readdirSync } from "node:fs";
-import { buildDoc, countPaths } from "../src/walker.ts";
+import { buildDoc, countPaths, rolledUpTriage } from "../src/walker.ts";
 import { buildRows, computeVisible, defaultExpanded } from "../src/rows.ts";
 import type { Notes } from "../src/types.ts";
 
-const PAYLOADS = join(homedir(), ".json-notes", "payloads");
-const file =
-  process.argv[2] ??
-  join(PAYLOADS, readdirSync(PAYLOADS).filter((f) => f.endsWith(".json")).sort().at(-1)!);
+// Defaults to the payload that ships with the repo, so the numbers are reproducible by
+// anyone and no sample of yours is read by a script you ran to time something.
+const file = process.argv[2] ?? join(import.meta.dir, "..", "src", "demo-payload.json");
 
 const raw = await Bun.file(file).text();
 const json = JSON.parse(raw);
@@ -36,8 +33,15 @@ const notes: Notes = {};
 const somePaths = [...doc.pathIndex.keys()];
 for (let i = 0; i < somePaths.length; i += 17) notes[somePaths[i]!] = { mark: "interesting" };
 for (let i = 5; i < somePaths.length; i += 29) notes[somePaths[i]!] = { note: "a note @feat" };
-const container = somePaths.find((p) => p.endsWith("bancassurance")) ?? somePaths[3]!;
+// The biggest top-level section, whatever the payload is — ignoring that is the case
+// where inheritance has the most work to do.
+const container =
+  somePaths
+    .filter((p) => p && !p.includes("."))
+    .sort((a, b) => somePaths.filter((p) => p.startsWith(b + ".")).length -
+                     somePaths.filter((p) => p.startsWith(a + ".")).length)[0] ?? somePaths[3]!;
 notes[container] = { mark: "ignore" };
+const rolled = rolledUpTriage(doc, notes);
 
 console.log("one-off (per payload load)");
 time("buildDoc", 20, () => buildDoc("bench", file, json));
@@ -49,28 +53,28 @@ const allExpanded = new Set(doc.nodes.filter((n) => n.kind !== "scalar").map((n)
 const arrays = new Set<number>();
 
 time("buildRows (default collapsed)", 200, () =>
-  buildRows({ doc, notes, expanded, arrayExpanded: arrays, visible: null }),
+  buildRows({ doc, notes, expanded, arrayExpanded: arrays, rolled, visible: null }),
 );
 time("buildRows (everything expanded)", 200, () =>
-  buildRows({ doc, notes, expanded: allExpanded, arrayExpanded: arrays, visible: null }),
+  buildRows({ doc, notes, expanded: allExpanded, arrayExpanded: arrays, rolled, visible: null }),
 );
-time("computeVisible (search 'e')", 200, () => computeVisible(doc, notes, "e", "all"));
-time("computeVisible (search 'premium')", 200, () => computeVisible(doc, notes, "premium", "all"));
-time("computeVisible (filter untriaged)", 200, () => computeVisible(doc, notes, "", "untriaged"));
-time("countPaths", 200, () => countPaths(doc, notes));
+time("computeVisible (search 'e')", 200, () => computeVisible(doc, notes, "e", "all", rolled));
+time("computeVisible (search 'institution')", 200, () => computeVisible(doc, notes, "institution", "all", rolled));
+time("computeVisible (filter untriaged)", 200, () => computeVisible(doc, notes, "", "untriaged", rolled));
+time("countPaths", 200, () => countPaths(doc, notes, rolled));
 
 console.log("\ncomposite: one keystroke in a note (what React re-runs)");
 const perKeystroke = time("countPaths + buildRows + computeVisible", 200, () => {
-  countPaths(doc, notes);
-  computeVisible(doc, notes, "", "all");
-  buildRows({ doc, notes, expanded: allExpanded, arrayExpanded: arrays, visible: null });
+  countPaths(doc, notes, rolled);
+  computeVisible(doc, notes, "", "all", rolled);
+  buildRows({ doc, notes, expanded: allExpanded, arrayExpanded: arrays, rolled, visible: null });
 });
 
 console.log("\ncomposite: same, with N payloads open (tab badges recount all)");
 for (const n of [1, 4, 10]) {
   const ms = time(`${n} tabs`, 100, () => {
-    for (let i = 0; i < n; i++) countPaths(doc, notes);
-    buildRows({ doc, notes, expanded: allExpanded, arrayExpanded: arrays, visible: null });
+    for (let i = 0; i < n; i++) countPaths(doc, notes, rolled);
+    buildRows({ doc, notes, expanded: allExpanded, arrayExpanded: arrays, rolled, visible: null });
   });
   if (ms > 16) console.log(`      ^ over one 60fps frame (16.7ms)`);
 }

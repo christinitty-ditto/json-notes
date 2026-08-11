@@ -7,7 +7,7 @@
     <title>json-notes — annotate and document undocumented JSON API responses</title>
     <meta
       name="description"
-      content="A free, open-source tool for documenting undocumented JSON APIs. Write down what every field of a response means, record the questions you still have, and see whether the payload covers what you need to build. Runs entirely in your browser."
+      content="A free, open-source tool for documenting undocumented JSON APIs. Write down what every field of a response means, record the questions you still have, and see whether the payload covers what you need to build. Runs entirely in your browser; export your notes as JSON to back up or share."
     />
     <link rel="canonical" href="__BASE__/" />
     <meta name="theme-color" content="#16171a" />
@@ -38,7 +38,7 @@
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "Any (web browser)",
         "url": "__BASE__/",
-        "description": "A tool for documenting undocumented JSON API responses. Record what every field of a large payload means, mark the ones you still have questions about, and check whether the payload covers what you need to build. Runs entirely in the browser; no data is uploaded.",
+        "description": "A tool for documenting undocumented JSON API responses. Record what every field of a large payload means, mark the ones you still have questions about, and check whether the payload covers what you need to build. Runs entirely in the browser; no data is uploaded. Notes export as a JSON bundle you can back up, move to another machine, or hand to a teammate.",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "license": "https://opensource.org/licenses/MIT",
         "isAccessibleForFree": true
@@ -187,6 +187,26 @@
       }
       .term .ok { color: var(--str); } .term .no { color: var(--warn); }
 
+      /* ---- portability: the answer to "so my notes are stuck in one browser?" ---- */
+      .take {
+        margin: 26px 0 0; padding: 30px; border: 1px solid var(--line);
+        border-radius: 11px; background: var(--panel);
+        display: grid; grid-template-columns: 1.05fr .95fr; gap: 30px; align-items: center;
+      }
+      .take h2 { font-size: 19px; margin: 0 0 8px; font-weight: 600; letter-spacing: -.3px; }
+      .take p { color: var(--dim); margin: 0 0 12px; font-size: 13px; max-width: 48ch; }
+      .take ul { margin: 0; padding: 0; list-style: none; }
+      .take li {
+        color: var(--dim); font-size: 12.5px; margin: 7px 0; padding-left: 15px;
+        text-indent: -15px;
+      }
+      .take li::before { content: "· "; color: var(--dim); }
+      .take b { color: var(--fg); font-weight: 600; }
+      .mi { display: flex; justify-content: space-between; gap: 18px; padding: 3px 12px; }
+      .msep { border-top: 1px solid var(--line); margin: 5px 0; }
+      .mnote { padding: 3px 12px; color: var(--dim); font-size: 11px; }
+      @media (max-width: 720px) { .take { grid-template-columns: 1fr; gap: 22px; } }
+
       footer {
         margin-top: 70px; padding: 24px 0 56px; border-top: 1px solid var(--line);
         color: var(--dim); font-size: 12px; display: flex; gap: 14px; flex-wrap: wrap;
@@ -219,7 +239,7 @@
           <a class="btn" href="app/?demo">Try it with a sample</a>
           <a class="btn ghost" href="app/">Open the app</a>
         </div>
-        <p class="micro">Free · open source · runs entirely in your browser</p>
+        <p class="micro">Free · open source · runs in your browser · notes export as JSON</p>
       </header>
 
       <!-- The product, shown rather than described. -->
@@ -353,6 +373,51 @@
           <span class="no">✗ Refused to connect — Content-Security-Policy: connect-src 'none'</span><br />
           <span class="d">&gt;</span> indexedDB.databases()<br />
           <span class="ok">✓ [{ name: 'json-notes' }]</span>
+        </div>
+      </section>
+
+      <section class="take">
+        <div>
+          <h2>Browser-only, not browser-trapped</h2>
+          <p>
+            One <b>↓ export</b> button, one file, and you can drop it back on any browser
+            on any machine. That is also how a teammate gets the field docs.
+          </p>
+          <ul>
+            <li>
+              <b>Everything in one file</b> — payloads, notes, marks and features. It
+              carries whatever customer data your samples did, so treat it that way.
+            </li>
+            <li>
+              Drop it back on the window and the lot comes back, payloads included — the
+              person you sent it to needs nothing else.
+            </li>
+            <li>
+              Notes key on payload name and normalized path, so an imported bundle lands
+              back on the same fields.
+            </li>
+            <li>
+              Imports <b>merge</b> and existing notes win — an old backup cannot overwrite
+              newer work.
+            </li>
+            <li>
+              Browsers evict site data under pressure, which is why the button is in the
+              toolbar and not buried in a menu.
+            </li>
+          </ul>
+        </div>
+        <div class="shot sm">
+          <div class="bar">
+            <span class="pill on">openalex-work <span class="cnt">521</span></span>
+            <span class="grow"></span>
+            <span class="chip on">↓ export</span>
+            <span class="chip">⋯</span>
+          </div>
+          <div class="body">
+            <div class="mi"><span>json-notes-2026-08-10.json</span></div>
+            <div class="mnote">every payload · every mark, note and feature</div>
+          </div>
+          <div class="foot"><span>drop it back on the window to restore all of it</span></div>
         </div>
       </section>
 

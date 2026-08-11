@@ -6,6 +6,23 @@ export type Notes = Record<string, Entry>;
 export type Feature = { id: string; need?: string };
 export type Features = Record<string, Feature>;
 
+/**
+ * A named group of features — `work-card = author-affiliations, oa-status`. Exists so a
+ * payload can be told what it is expected to support in one pick rather than several.
+ * Ids share one namespace with features: `@quote-flow` in a note must not mean two things.
+ */
+export type FeatureSet = { id: string; need?: string; features: string[] };
+export type FeatureSets = Record<string, FeatureSet>;
+
+/**
+ * Payload name -> the feature and set ids deliberately marked applicable to it.
+ *
+ * Only picks are stored. A feature linked from a note in that payload is applicable to it
+ * by that fact and is derived on load — same rule as feature ids themselves, so a
+ * half-typed `@fea` never persists and nothing is written twice.
+ */
+export type Applicable = Record<string, string[]>;
+
 export type FilterMode = "all" | "untriaged" | "interesting" | "question";
 
 export type Kind = "scalar" | "object" | "array";
@@ -53,6 +70,8 @@ export type StateWire = {
   docs: PayloadWire[];
   notes: Record<string, Notes>;
   features: Features;
+  featureSets: FeatureSets;
+  applicable: Applicable;
   /** Payloads that failed to parse — surfaced rather than silently skipped. */
   broken?: { file: string; error: string }[];
   /** Workspace directory holding payloads, notes and features.yaml. */

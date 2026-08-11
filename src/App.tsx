@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Entry, Features, FilterMode, Mark, Notes, StateWire } from "./types.ts";
-import { buildDoc, countPaths, featureIdsIn, searchIndex } from "./walker.ts";
+import type {
+  Applicable,
+  Entry,
+  FeatureSets,
+  Features,
+  FilterMode,
+  Mark,
+  Notes,
+  StateWire,
+} from "./types.ts";
+import { buildDoc, countPaths, rolledUpTriage, searchIndex } from "./walker.ts";
+import { allFeatureIds, docFeatures, ID_RE, idTaken } from "./features.ts";
 import { buildRows, computeVisible, defaultExpanded } from "./rows.ts";
 import {
   delPayload,
@@ -8,9 +18,14 @@ import {
   importBundle,
   isBundle,
   loadAll,
+  persistAsked,
+  putApplicable,
+  putFeatureSets,
   putFeatures,
   putNotes,
   putPayload,
+  requestPersistence,
+  setPersistAsked,
   storageInfo,
   type StorageInfo,
 } from "./store.ts";
@@ -19,24 +34,41 @@ import { DropZone } from "./components/DropZone.tsx";
 import { Header } from "./components/Header.tsx";
 import { Breadcrumb } from "./components/Breadcrumb.tsx";
 import { TreeView } from "./components/TreeView.tsx";
-import { FeaturesPanel, type FeatureRow } from "./components/FeaturesPanel.tsx";
+import { FeaturesPanel } from "./components/FeaturesPanel.tsx";
+import { FeatureStrip } from "./components/FeatureStrip.tsx";
+import { SelectionBar } from "./components/SelectionBar.tsx";
 import { Menu } from "./components/Menu.tsx";
+import { PersistNote, type PersistPrompt } from "./components/PersistNote.tsx";
 
 const NO_NOTES: Notes = {};
 const NO_SET: Set<number> = new Set();
+const NO_IDS: string[] = [];
 const basename = (p: string) => p.split("/").pop() ?? p;
+
+/** What the storage line says, per answer to the one permission this tool asks for. */
+const PERSIST_NOTE: Record<StorageInfo["permission"], string> = {
+  granted: " · persistent, the browser will keep it",
+  denied: " · not persistent — refused, so export regularly",
+  undecided: " · not persistent — export regularly",
+  unsupported: " · export regularly",
+};
 
 export function App() {
   const [wire, setWire] = useState<StateWire | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, Notes>>({});
   const [features, setFeatures] = useState<Features>({});
+  const [sets, setSets] = useState<FeatureSets>({});
+  const [applicable, setApplicable] = useState<Applicable>({});
 
   const [tab, setTab] = useState(0);
   const [search, setSearch] = useState("");
   const [dSearch, setDSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [editing, setEditing] = useState<string | null>(null);
+  /** Normalized paths in the current payload that marks and notes apply to together. */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkEditing, setBulkEditing] = useState(false);
 
   const [expanded, setExpanded] = useState<Record<string, Set<number>>>({});
   const [arrayExpanded, setArrayExpanded] = useState<Record<string, Set<number>>>({});
@@ -46,6 +78,7 @@ export function App() {
   const [pending, setPending] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
+  const [persistPrompt, setPersistPrompt] = useState<PersistPrompt | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -58,6 +91,8 @@ export function App() {
     setWire(s);
     setNotes(s.notes);
     setFeatures(s.features);
+    setSets(s.featureSets);
+    setApplicable(s.applicable);
     return s;
   }, []);
 
@@ -83,6 +118,46 @@ export function App() {
   const flash = useCallback((msg: string, ms = 1800) => {
     setToast(msg);
     setTimeout(() => setToast(null), ms);
+  }, []);
+
+  /**
+   * Put the persistence question once, and only once there is something to lose — not on
+   * a cold load, and not to someone who has opened nothing but the sample.
+   */
+  const offered = useRef(false);
+  useEffect(() => {
+    if (offered.current || persistPrompt || !wire || !storage) return;
+    if (storage.persisted || storage.permission !== "undecided") return;
+    if (!wire.docs.some((d) => d.name !== DEMO_NAME)) return;
+    let live = true;
+    persistAsked().then((asked) => {
+      if (!live || asked) return;
+      offered.current = true;
+      setPersistPrompt("offer");
+    });
+    return () => {
+      live = false;
+    };
+  }, [wire, storage, persistPrompt]);
+
+  const onAskPersist = useCallback(async () => {
+    offered.current = true;
+    await setPersistAsked();
+    const info = await requestPersistence();
+    setStorage(info);
+    // A refusal is not a failure state — it just changes what the app has to tell you.
+    if (info.persisted) {
+      setPersistPrompt(null);
+      flash("the browser will keep this site's data");
+    } else {
+      setPersistPrompt("result");
+    }
+  }, [flash]);
+
+  const onDismissPersist = useCallback(() => {
+    offered.current = true;
+    void setPersistAsked();
+    setPersistPrompt(null);
   }, []);
 
   const onDrop = useCallback(
@@ -130,19 +205,16 @@ export function App() {
     [refresh],
   );
 
-  const onExport = useCallback(
-    async (includePayloads: boolean) => {
-      const bundle = await exportBundle(includePayloads);
-      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `json-notes-${new Date().toISOString().slice(0, 10)}${includePayloads ? "-full" : ""}.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      flash(includePayloads ? "exported notes + payloads" : "exported annotations");
-    },
-    [flash],
-  );
+  const onExport = useCallback(async () => {
+    const bundle = await exportBundle();
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `json-notes-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    flash("exported notes + payloads");
+  }, [flash]);
 
   const docs = useMemo(
     () => (wire ? wire.docs.map((d) => buildDoc(d.name, d.file, d.json)) : []),
@@ -180,9 +252,15 @@ export function App() {
   const doc = docs[tab];
   const docNotes = (doc && notes[doc.name]) || NO_NOTES;
 
+  /** Containers settled by something annotated below them. Derived, never stored. */
+  const rolled = useMemo(
+    () => (doc ? rolledUpTriage(doc, docNotes) : new Set<string>()),
+    [doc, docNotes],
+  );
+
   const visible = useMemo(
-    () => (doc ? computeVisible(doc, docNotes, dSearch, filter) : null),
-    [doc, docNotes, dSearch, filter],
+    () => (doc ? computeVisible(doc, docNotes, dSearch, filter, rolled) : null),
+    [doc, docNotes, dSearch, filter, rolled],
   );
 
   const rows = useMemo(
@@ -193,19 +271,24 @@ export function App() {
             notes: docNotes,
             expanded: expanded[doc.name] ?? NO_SET,
             arrayExpanded: arrayExpanded[doc.name] ?? NO_SET,
+            rolled,
             visible,
           })
         : [],
-    [doc, docNotes, expanded, arrayExpanded, visible],
+    [doc, docNotes, expanded, arrayExpanded, rolled, visible],
   );
 
   const counts = useMemo(
-    () => (doc ? countPaths(doc, docNotes) : { total: 0, marked: 0, untriaged: 0 }),
-    [doc, docNotes],
+    () => (doc ? countPaths(doc, docNotes, rolled) : { total: 0, marked: 0, untriaged: 0 }),
+    [doc, docNotes, rolled],
   );
 
   const tabCounts = useMemo(
-    () => docs.map((d) => countPaths(d, notes[d.name] ?? NO_NOTES)),
+    () =>
+      docs.map((d) => {
+        const n = notes[d.name] ?? NO_NOTES;
+        return countPaths(d, n, rolledUpTriage(d, n));
+      }),
     [docs, notes],
   );
 
@@ -230,6 +313,23 @@ export function App() {
           return { ...prev, [docName]: rest };
         }
         return { ...prev, [docName]: { ...cur, [path]: next } };
+      });
+      scheduleSave(docName);
+    },
+    [scheduleSave],
+  );
+
+  /** The same edit against a whole selection, in one update and one save. */
+  const patchMany = useCallback(
+    (docName: string, paths: string[], p: Partial<Entry>) => {
+      setNotes((prev) => {
+        const cur = { ...(prev[docName] ?? {}) };
+        for (const path of paths) {
+          const next: Entry = { ...cur[path], ...p };
+          if (!next.mark && !next.note) delete cur[path];
+          else cur[path] = next;
+        }
+        return { ...prev, [docName]: cur };
       });
       scheduleSave(docName);
     },
@@ -262,23 +362,28 @@ export function App() {
     [doc],
   );
 
+  /** Behaviour 16: ignoring a container folds it away. */
+  const collapsePaths = useCallback(
+    (paths: string[]) => {
+      if (!doc) return;
+      setExpanded((prev) => {
+        const s = new Set(prev[doc.name] ?? []);
+        for (const path of paths) for (const id of doc.pathIndex.get(path) ?? []) s.delete(id);
+        return { ...prev, [doc.name]: s };
+      });
+    },
+    [doc],
+  );
+
   const onMark = useCallback(
     (path: string, m: Mark) => {
       if (!doc) return;
       const cur = notesRef.current[doc.name]?.[path]?.mark;
       const next = cur === m ? undefined : m;
       patch(doc.name, path, { mark: next });
-      // Behaviour 16: ignoring a container folds it away.
-      if (next === "ignore") {
-        const ids = doc.pathIndex.get(path) ?? [];
-        setExpanded((prev) => {
-          const s = new Set(prev[doc.name] ?? []);
-          for (const id of ids) s.delete(id);
-          return { ...prev, [doc.name]: s };
-        });
-      }
+      if (next === "ignore") collapsePaths([path]);
     },
-    [doc, patch],
+    [doc, patch, collapsePaths],
   );
 
   const onNote = useCallback(
@@ -288,6 +393,69 @@ export function App() {
     },
     [doc, patch],
   );
+
+  // ---- selection ---------------------------------------------------------
+
+  /**
+   * Selection is by normalized path, the same unit annotations use. Selecting one
+   * instance of `Members[].Relation` selects the key, which is what a note is about.
+   */
+  const onSelectRow = useCallback(
+    (index: number, extend: boolean) => {
+      const row = rows[index];
+      if (!row || row.more) return;
+      if (!extend) {
+        setSelected((prev) => {
+          const s = new Set(prev);
+          s.has(row.path) ? s.delete(row.path) : s.add(row.path);
+          return s;
+        });
+        return;
+      }
+      const [a, b] = index < cursor ? [index, cursor] : [cursor, index];
+      setSelected((prev) => {
+        const s = new Set(prev);
+        for (let i = a; i <= b; i++) {
+          const r = rows[i];
+          if (r && !r.more) s.add(r.path);
+        }
+        return s;
+      });
+      setCursor(index);
+    },
+    [rows, cursor],
+  );
+
+  const clearSelection = useCallback(() => {
+    setSelected(new Set());
+    setBulkEditing(false);
+  }, []);
+
+  /** Set the mark on everything selected — or clear it, if they all already carry it. */
+  const onMarkSelection = useCallback(
+    (m: Mark) => {
+      if (!doc || !selected.size) return;
+      const paths = [...selected];
+      const all = paths.every((p) => notesRef.current[doc.name]?.[p]?.mark === m);
+      patchMany(doc.name, paths, { mark: all ? undefined : m });
+      if (!all && m === "ignore") collapsePaths(paths);
+    },
+    [doc, selected, patchMany, collapsePaths],
+  );
+
+  const onNoteSelection = useCallback(
+    (note: string) => {
+      if (!doc || !selected.size) return;
+      patchMany(doc.name, [...selected], { note: note.trim() ? note : undefined });
+    },
+    [doc, selected, patchMany],
+  );
+
+  // Selection is per payload — the paths mean nothing in the next one.
+  useEffect(() => {
+    setSelected(new Set());
+    setBulkEditing(false);
+  }, [tab]);
 
   const onCopy = useCallback((path: string) => {
     void navigator.clipboard.writeText(path);
@@ -439,9 +607,20 @@ export function App() {
         return;
       }
 
+      // With a selection up, the mark keys act on all of it and the cursor stays put —
+      // advancing through rows you have just settled in bulk would only lose your place.
+      case " ":
+        if (row && !row.more) {
+          e.preventDefault();
+          onSelectRow(cursor, false);
+        }
+        return;
       case "i":
       case "*":
-        if (!row?.more) {
+        if (selected.size) {
+          e.preventDefault();
+          onMarkSelection("interesting");
+        } else if (!row?.more) {
           e.preventDefault();
           onMark(row!.path, "interesting");
           move(1);
@@ -449,7 +628,10 @@ export function App() {
         return;
       case "q":
       case "?":
-        if (!row?.more) {
+        if (selected.size) {
+          e.preventDefault();
+          onMarkSelection("question");
+        } else if (!row?.more) {
           e.preventDefault();
           onMark(row!.path, "question");
           move(1);
@@ -457,7 +639,10 @@ export function App() {
         return;
       case "x":
       case "-":
-        if (!row?.more) {
+        if (selected.size) {
+          e.preventDefault();
+          onMarkSelection("ignore");
+        } else if (!row?.more) {
           e.preventDefault();
           onMark(row!.path, "ignore");
           move(1);
@@ -466,7 +651,10 @@ export function App() {
 
       case "Enter":
       case "n":
-        if (row && !row.more) {
+        if (selected.size) {
+          e.preventDefault();
+          setBulkEditing(true);
+        } else if (row && !row.more) {
           e.preventDefault();
           setEditing(row.path);
         }
@@ -489,6 +677,7 @@ export function App() {
         return setTab((t) => Math.min(t + 1, docs.length));
       case "Escape":
         if (editing) setEditing(null);
+        else if (selected.size) clearSelection();
         else if (search) setSearch("");
         return;
     }
@@ -502,42 +691,33 @@ export function App() {
 
   // ---- features ----------------------------------------------------------
 
-  const featureRows: FeatureRow[] = useMemo(() => {
-    const map = new Map<string, FeatureRow>();
-    const seed = (id: string) => {
-      if (!map.has(id))
-        map.set(id, { id, need: features[id]?.need, status: "missing", links: [] });
-      return map.get(id)!;
-    };
-    for (const id of Object.keys(features)) seed(id);
-    for (const d of docs) {
-      for (const [path, e] of Object.entries(notes[d.name] ?? {})) {
-        for (const id of featureIdsIn(e.note)) {
-          seed(id).links.push({
-            doc: d.name,
-            path,
-            question: e.mark === "question",
-            note: e.note ?? "",
-          });
-        }
-      }
-    }
-    for (const f of map.values()) {
-      f.status = !f.links.length
-        ? "missing"
-        : f.links.some((l) => l.question)
-          ? "unresolved"
-          : "covered";
-    }
-    return [...map.values()].sort((a, b) => a.id.localeCompare(b.id));
-  }, [docs, notes, features]);
+  /**
+   * Status is per payload: "covered" is only ever an answer about one payload, since a
+   * key in one endpoint's response says nothing about what another one carries.
+   */
+  const perDoc = useMemo(
+    () =>
+      docs.map((d) => ({
+        doc: d.name,
+        rows: docFeatures(
+          notes[d.name] ?? NO_NOTES,
+          features,
+          sets,
+          applicable[d.name] ?? NO_IDS,
+        ),
+      })),
+    [docs, notes, features, sets, applicable],
+  );
 
-  // Autocomplete offers ids already linked from a note plus ones explicitly declared.
-  const featureIds = useMemo(() => featureRows.map((f) => f.id), [featureRows]);
+  // Autocomplete offers ids already linked from a note, ones declared, and set members.
+  const featureIds = useMemo(
+    () => allFeatureIds(features, sets, notes),
+    [features, sets, notes],
+  );
 
-  // features.yaml holds ONLY what you typed deliberately: descriptions, and features
-  // declared with no linked key yet. Ids that appear in a note are derived on load, so
-  // half-typed `@fea` never reaches disk.
+  // Storage holds ONLY what you typed deliberately: descriptions, declared features and
+  // sets, and the picks against a payload. Ids that appear in a note are derived on load,
+  // so a half-typed `@fea` never reaches disk.
   const onNeed = useCallback((id: string, need: string) => {
     setFeatures((prev) => {
       const next = { ...prev, [id]: { id, need: need.trim() || undefined } };
@@ -546,16 +726,24 @@ export function App() {
     });
   }, []);
 
-  const onAddFeature = useCallback((raw: string) => {
-    const id = raw.trim().replace(/^@/, "");
-    if (!/^[A-Za-z0-9][\w-]*$/.test(id)) return;
-    setFeatures((prev) => {
-      if (prev[id]) return prev;
-      const next = { ...prev, [id]: { id } };
-      void putFeatures(next);
-      return next;
-    });
-  }, []);
+  const declareFeature = useCallback(
+    (raw: string): string | null => {
+      const id = raw.trim().replace(/^@/, "");
+      if (!ID_RE.test(id)) return null;
+      if (idTaken(id, {}, sets)) {
+        flash(`@${id} is already a set — ids are shared, pick another`);
+        return null;
+      }
+      setFeatures((prev) => {
+        if (prev[id]) return prev;
+        const next = { ...prev, [id]: { id } };
+        void putFeatures(next);
+        return next;
+      });
+      return id;
+    },
+    [sets, flash],
+  );
 
   const onDropFeature = useCallback((id: string) => {
     setFeatures((prev) => {
@@ -565,6 +753,94 @@ export function App() {
       return next;
     });
   }, []);
+
+  // ---- feature sets ------------------------------------------------------
+
+  const onAddSet = useCallback(
+    (raw: string) => {
+      const id = raw.trim().replace(/^@/, "");
+      if (!ID_RE.test(id)) return;
+      const clash = idTaken(id, features, sets);
+      if (clash) return flash(`@${id} is already a ${clash} — ids are shared, pick another`);
+      setSets((prev) => {
+        const next = { ...prev, [id]: { id, features: [] } };
+        void putFeatureSets(next);
+        return next;
+      });
+    },
+    [features, sets, flash],
+  );
+
+  const onSetNeed = useCallback((id: string, need: string) => {
+    setSets((prev) => {
+      const cur = prev[id];
+      if (!cur) return prev;
+      const next = { ...prev, [id]: { ...cur, need: need.trim() || undefined } };
+      void putFeatureSets(next);
+      return next;
+    });
+  }, []);
+
+  const onDropSet = useCallback((id: string) => {
+    setSets((prev) => {
+      if (!(id in prev)) return prev;
+      const { [id]: _drop, ...next } = prev;
+      void putFeatureSets(next);
+      return next;
+    });
+    // A payload picked the set, not its contents — drop the pick with it.
+    setApplicable((prev) => {
+      const next: Applicable = {};
+      let changed = false;
+      for (const [name, ids] of Object.entries(prev)) {
+        const kept = ids.filter((x) => x !== id);
+        if (kept.length !== ids.length) changed = true;
+        if (kept.length) next[name] = kept;
+      }
+      if (!changed) return prev;
+      void putApplicable(next);
+      return next;
+    });
+  }, []);
+
+  const onSetMember = useCallback(
+    (setId: string, featureId: string, on: boolean) => {
+      // Adding a member is a deliberate act, so the feature is declared by it — that is
+      // what makes it offerable in autocomplete and listed in the registry.
+      if (on && !declareFeature(featureId)) return;
+      setSets((prev) => {
+        const cur = prev[setId];
+        if (!cur) return prev;
+        const members = on
+          ? cur.features.includes(featureId)
+            ? cur.features
+            : [...cur.features, featureId]
+          : cur.features.filter((f) => f !== featureId);
+        if (members === cur.features) return prev;
+        const next = { ...prev, [setId]: { ...cur, features: members } };
+        void putFeatureSets(next);
+        return next;
+      });
+    },
+    [declareFeature],
+  );
+
+  /** What this payload is on the hook for. Stored per payload, picks only. */
+  const onPick = useCallback(
+    (id: string, on: boolean) => {
+      if (!doc) return;
+      setApplicable((prev) => {
+        const cur = prev[doc.name] ?? [];
+        const list = on ? (cur.includes(id) ? cur : [...cur, id]) : cur.filter((x) => x !== id);
+        const next = { ...prev };
+        if (list.length) next[doc.name] = list;
+        else delete next[doc.name];
+        void putApplicable(next);
+        return next;
+      });
+    },
+    [doc],
+  );
 
   const onJump = useCallback(
     (docName: string, path: string) => {
@@ -685,9 +961,18 @@ export function App() {
           onClick={() => setTab(docs.length)}
         >
           features
-          <span className="badge">{featureRows.length}</span>
+          <span className="badge">{featureIds.length}</span>
         </button>
         <div className="tools">
+          {/* Out of the dropdown deliberately: browsers can evict site data, so the
+              export is the backstop and needs to be visible, not discovered. */}
+          <button
+            className="tool export"
+            title="Download payloads and annotations as one JSON file — drop it back here to restore. Contains whatever customer data your samples do."
+            onClick={() => void onExport()}
+          >
+            ↓ export
+          </button>
           <Menu
             items={[
               {
@@ -695,21 +980,22 @@ export function App() {
                 hint: "or drag them in",
                 onClick: () => fileRef.current?.click(),
               },
-              { separator: true },
-              {
-                label: "Export annotations",
-                hint: "small, no payload data",
-                onClick: () => onExport(false),
-              },
-              {
-                label: "Export everything",
-                hint: "includes customer data",
-                onClick: () => onExport(true),
-              },
+              // Once the question has been answered it lives here, so the explanation is
+              // always reachable rather than gone the moment the notice is dismissed.
+              ...(storage && !storage.persisted && storage.permission !== "unsupported"
+                ? [
+                    {
+                      label: "Keeping your data",
+                      hint: storage.permission === "denied" ? "not granted" : "why it matters",
+                      onClick: () =>
+                        setPersistPrompt(storage.permission === "denied" ? "result" : "offer"),
+                    },
+                  ]
+                : []),
               { separator: true },
               {
                 note: storage
-                  ? `Stored in this browser${storage.usageMB != null ? ` · ${storage.usageMB.toFixed(1)} MB used` : ""}${storage.persisted ? " · persistent" : " · not persistent, export regularly"}`
+                  ? `Stored in this browser${storage.usageMB != null ? ` · ${storage.usageMB.toFixed(1)} MB used` : ""}${PERSIST_NOTE[storage.permission]}`
                   : "Stored in this browser",
               },
             ]}
@@ -729,13 +1015,32 @@ export function App() {
         </div>
       </div>
 
+      {persistPrompt && (
+        <PersistNote
+          mode={persistPrompt}
+          info={storage}
+          onAsk={() => void onAskPersist()}
+          onExport={() => {
+            setPersistPrompt(null);
+            void onExport();
+          }}
+          onDismiss={onDismissPersist}
+        />
+      )}
+
       {onFeatures ? (
         <FeaturesPanel
-          rows={featureRows}
+          features={features}
+          sets={sets}
+          perDoc={perDoc}
           onNeed={onNeed}
           onJump={onJump}
-          onAdd={onAddFeature}
+          onAdd={declareFeature}
           onDrop={onDropFeature}
+          onSetNeed={onSetNeed}
+          onAddSet={onAddSet}
+          onDropSet={onDropSet}
+          onSetMember={onSetMember}
         />
       ) : (
         <>
@@ -749,12 +1054,21 @@ export function App() {
             onStep={onSearchStep}
             searchRef={searchRef}
           />
+          <FeatureStrip
+            rows={perDoc[tab]?.rows ?? []}
+            features={features}
+            sets={sets}
+            picked={applicable[doc!.name] ?? NO_IDS}
+            onPick={onPick}
+            onJump={(path) => onJump(doc!.name, path)}
+          />
           <Breadcrumb doc={doc!} path={rows[cursor]?.path ?? null} notes={docNotes} />
           <TreeView
             rows={rows}
             notes={docNotes}
             editing={editing}
             cursor={cursor}
+            selected={selected}
             featureIds={featureIds}
             onToggle={onToggle}
             onExpandArray={onExpandArray}
@@ -763,7 +1077,20 @@ export function App() {
             onEdit={setEditing}
             onCopy={onCopy}
             onCursor={setCursor}
+            onSelect={onSelectRow}
           />
+          {selected.size > 0 && (
+            <SelectionBar
+              paths={[...selected]}
+              notes={docNotes}
+              editing={bulkEditing}
+              featureIds={featureIds}
+              onMark={onMarkSelection}
+              onNote={onNoteSelection}
+              onEdit={setBulkEditing}
+              onClear={clearSelection}
+            />
+          )}
           <div className="legend">
             <span className="lg-marks">
               <b className="m-i">i</b> interesting
@@ -773,6 +1100,7 @@ export function App() {
             <span className="lg-div" />
             <span><b>j k</b> move</span>
             <span><b>h l</b> fold</span>
+            <span><b>space</b> select</span>
             <span><b>⏎</b> note</span>
             <span><b>y</b> copy path</span>
             <span><b>/</b> search</span>

@@ -1,4 +1,4 @@
-import type { Features, Notes, StateWire } from "./types.ts";
+import type { Applicable, FeatureSets, Features, Notes, StateWire } from "./types.ts";
 
 /**
  * All state lives in the browser. Nothing is ever sent anywhere — there is no server
@@ -17,8 +17,13 @@ export type Bundle = {
   exportedAt: string;
   notes: Record<string, Notes>;
   features: Features;
-  /** Payloads are opt-in: they are the part that carries customer data. */
+  /**
+   * Always written on export. Optional because imports must still accept bundles without
+   * them — older exports predate all three, as does whatever `scripts/bundle.ts` migrates.
+   */
   payloads?: Record<string, string>;
+  featureSets?: FeatureSets;
+  applicable?: Applicable;
 };
 
 let dbp: Promise<IDBDatabase> | null = null;
@@ -92,7 +97,17 @@ export async function loadAll(): Promise<StateWire> {
   }
 
   const features = (await kvGet<Features>("features")) ?? {};
-  return { docs, notes, features, broken, home: "this browser (IndexedDB)" };
+  const featureSets = (await kvGet<FeatureSets>("featureSets")) ?? {};
+  const applicable = (await kvGet<Applicable>("applicable")) ?? {};
+  return {
+    docs,
+    notes,
+    features,
+    featureSets,
+    applicable,
+    broken,
+    home: "this browser (IndexedDB)",
+  };
 }
 
 export async function putPayload(fileName: string, text: string): Promise<string> {
@@ -104,7 +119,8 @@ export async function putPayload(fileName: string, text: string): Promise<string
 
 export async function delPayload(name: string): Promise<void> {
   await tx(PAYLOADS, "readwrite", (s) => s.delete(name));
-  // Notes are kept deliberately: re-adding the payload restores every annotation.
+  // Notes and applicable features are kept deliberately: re-adding the payload restores
+  // everything you said about it.
 }
 
 export const putNotes = (name: string, notes: Notes) =>
@@ -112,22 +128,27 @@ export const putNotes = (name: string, notes: Notes) =>
 
 export const putFeatures = (features: Features) => kvPut("features", features);
 
+export const putFeatureSets = (sets: FeatureSets) => kvPut("featureSets", sets);
+
+export const putApplicable = (applicable: Applicable) => kvPut("applicable", applicable);
+
 // ---- portability ---------------------------------------------------------
 
-export async function exportBundle(includePayloads: boolean): Promise<Bundle> {
+/** One export, and it carries everything — payloads included, so it carries whatever
+ *  customer data the samples did. Dropping the file back on the window restores it. */
+export async function exportBundle(): Promise<Bundle> {
   const state = await loadAll();
-  const bundle: Bundle = {
+  const names = await tx<IDBValidKey[]>(PAYLOADS, "readonly", (s) => s.getAllKeys());
+  const texts = await tx<string[]>(PAYLOADS, "readonly", (s) => s.getAll());
+  return {
     format: BUNDLE_MARKER,
     exportedAt: new Date().toISOString(),
     notes: state.notes,
     features: state.features,
+    featureSets: state.featureSets,
+    applicable: state.applicable,
+    payloads: Object.fromEntries(names.map((n, i) => [String(n), texts[i] ?? ""])),
   };
-  if (includePayloads) {
-    const names = await tx<IDBValidKey[]>(PAYLOADS, "readonly", (s) => s.getAllKeys());
-    const texts = await tx<string[]>(PAYLOADS, "readonly", (s) => s.getAll());
-    bundle.payloads = Object.fromEntries(names.map((n, i) => [String(n), texts[i] ?? ""]));
-  }
-  return bundle;
 }
 
 export function isBundle(v: unknown): v is Bundle {
@@ -158,27 +179,59 @@ export async function importBundle(b: Bundle): Promise<{ notes: number; payloads
   const features = (await kvGet<Features>("features")) ?? {};
   await putFeatures({ ...(b.features ?? {}), ...features });
 
+  const sets = (await kvGet<FeatureSets>("featureSets")) ?? {};
+  await putFeatureSets({ ...(b.featureSets ?? {}), ...sets });
+
+  // Per payload, not per id: a set of picks you have made here outranks the bundle's,
+  // in one piece, so an import cannot half-restore an older idea of what a payload owes.
+  const applicable = (await kvGet<Applicable>("applicable")) ?? {};
+  await putApplicable({ ...(b.applicable ?? {}), ...applicable });
+
   return { notes: noteCount, payloads: payloadCount };
 }
 
 // ---- durability ----------------------------------------------------------
 
-export type StorageInfo = { persisted: boolean; usageMB: number | null; quotaMB: number | null };
+/**
+ * `persist()` answers with a bare boolean, which cannot distinguish "you said no" from
+ * "the browser decided no on its own". The permission state can, so the app is able to
+ * say something true rather than something vague.
+ */
+export type PersistState = "granted" | "denied" | "undecided" | "unsupported";
+
+export type StorageInfo = {
+  persisted: boolean;
+  permission: PersistState;
+  usageMB: number | null;
+  quotaMB: number | null;
+};
 
 /**
- * Browsers may evict site data under pressure. Asking for persistence makes that much
- * less likely; the export bundle is the real safety net.
+ * Read-only, and deliberately so: this runs on load, and a permission request fired at
+ * someone who has not yet seen the app is a request they have no reason to grant. Asking
+ * is `requestPersistence`, called from a button, after we have explained why.
  */
 export async function storageInfo(): Promise<StorageInfo> {
   let persisted = false;
   try {
-    persisted =
-      (await navigator.storage?.persisted?.()) ||
-      (await navigator.storage?.persist?.()) ||
-      false;
+    persisted = (await navigator.storage?.persisted?.()) ?? false;
   } catch {
     /* not supported */
   }
+
+  let permission: PersistState =
+    typeof navigator.storage?.persist === "function" ? "undecided" : "unsupported";
+  try {
+    const status = await navigator.permissions?.query({
+      name: "persistent-storage" as PermissionName,
+    });
+    if (status?.state === "granted") permission = "granted";
+    else if (status?.state === "denied") permission = "denied";
+  } catch {
+    /* Permissions API, or this permission name, not supported — "undecided" is honest. */
+  }
+  if (persisted) permission = "granted";
+
   let usageMB: number | null = null;
   let quotaMB: number | null = null;
   try {
@@ -188,5 +241,24 @@ export async function storageInfo(): Promise<StorageInfo> {
   } catch {
     /* not supported */
   }
-  return { persisted, usageMB, quotaMB };
+  return { persisted, permission, usageMB, quotaMB };
 }
+
+/**
+ * Browsers evict site data under pressure, and everything this tool holds lives in that
+ * data. Persistence makes eviction unlikely; it is not a guarantee, and it is refusable,
+ * which is why the export exists and why nothing here depends on the answer being yes.
+ */
+export async function requestPersistence(): Promise<StorageInfo> {
+  try {
+    await navigator.storage?.persist?.();
+  } catch {
+    /* refused, unsupported, or decided against — storageInfo reports which */
+  }
+  return storageInfo();
+}
+
+/** Remembers that we have put the question once, so it is asked once and not on a loop. */
+const ASKED = "persist-asked";
+export const persistAsked = () => kvGet<boolean>(ASKED).then((v) => v === true);
+export const setPersistAsked = () => kvPut(ASKED, true);

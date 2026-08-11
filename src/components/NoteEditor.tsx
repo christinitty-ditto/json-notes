@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 type Props = {
   value: string;
   features: string[];
+  placeholder?: string;
   onChange: (v: string) => void;
   onClose: () => void;
 };
@@ -15,7 +16,7 @@ function activeToken(text: string, caret: number): { start: number; q: string } 
   return { start: i, q: text.slice(i + 1, caret).toLowerCase() };
 }
 
-export function NoteEditor({ value, features, onChange, onClose }: Props) {
+export function NoteEditor({ value, features, placeholder, onChange, onClose }: Props) {
   // Local state so typing never re-renders the tree; the parent is told on a debounce.
   const [text, setText] = useState(value);
   const [caret, setCaret] = useState(value.length);
@@ -77,7 +78,7 @@ export function NoteEditor({ value, features, onChange, onClose }: Props) {
         value={text}
         rows={2}
         spellCheck={false}
-        placeholder="note — @ links a feature"
+        placeholder={placeholder ?? "note — @ links a feature"}
         onChange={(e) => {
           push(e.target.value);
           setCaret(e.target.selectionStart);
