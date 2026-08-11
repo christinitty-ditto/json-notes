@@ -50,6 +50,9 @@ export function FeatureStrip({ rows, features, sets, picked, onPick, onJump }: P
 
   return (
     <div className="fstrip">
+      {/* Only this part scrolls. The pick button and its menu stay outside, or the
+          overflow context clips the dropdown. */}
+      <div className="fstrip-scroll">
       {rows.map((f) => (
         <span
           key={f.id}
@@ -76,6 +79,7 @@ export function FeatureStrip({ rows, features, sets, picked, onPick, onJump }: P
       ))}
 
       {nothing && <span className="fstrip-hint">no features yet</span>}
+      </div>
 
       <div className="menu-wrap" ref={box}>
         <button className={`chip pick${open ? " on" : ""}`} onClick={() => setOpen((o) => !o)}>

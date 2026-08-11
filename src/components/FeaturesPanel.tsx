@@ -195,11 +195,20 @@ export function FeaturesPanel({
                   placeholder="what do you need this for?"
                   onBlur={(e) => onNeed(id, e.target.value)}
                 />
-                {!places.length && !inAnySet(id) && (
-                  <button className="feat-drop" title="remove this declaration" onClick={() => onDrop(id)}>
-                    ✕
-                  </button>
-                )}
+                {/* Always offered. Hiding it exactly when the feature is in use left the
+                    case you most want to delete — declared it, picked it, changed your
+                    mind — with no way out at all. */}
+                <button
+                  className="feat-drop"
+                  title={
+                    places.some((p) => p.row.links.length)
+                      ? `remove @${id} — notes that mention it keep it alive until you edit them`
+                      : `remove @${id}`
+                  }
+                  onClick={() => onDrop(id)}
+                >
+                  ✕
+                </button>
               </div>
 
               {places.length ? (

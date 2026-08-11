@@ -745,14 +745,72 @@ export function App() {
     [sets, flash],
   );
 
-  const onDropFeature = useCallback((id: string) => {
-    setFeatures((prev) => {
-      if (!(id in prev)) return prev;
-      const { [id]: _drop, ...next } = prev;
-      void putFeatures(next);
-      return next;
-    });
-  }, []);
+  /**
+   * Removing a feature reaches everything the tool wrote about it: the declaration, its
+   * membership of any set, and every payload that picked it.
+   *
+   * It does not reach `@id` in a note, because that is your note text — editing it to
+   * make a button work would be the tool deciding what your notes say. So the feature
+   * comes back derived, and you are told why rather than left wondering.
+   */
+  const onDropFeature = useCallback(
+    (id: string) => {
+      const inSets = Object.values(sets)
+        .filter((s) => s.features.includes(id))
+        .map((s) => s.id);
+      const pickedBy = Object.entries(applicable)
+        .filter(([, ids]) => ids.includes(id))
+        .map(([name]) => name);
+      const links = perDoc
+        .flatMap((d) => d.rows)
+        .filter((r) => r.id === id)
+        .reduce((n, r) => n + r.links.length, 0);
+
+      if (inSets.length || pickedBy.length) {
+        const what = [
+          inSets.length && `${inSets.length} set${inSets.length > 1 ? "s" : ""}`,
+          pickedBy.length && `${pickedBy.length} payload${pickedBy.length > 1 ? "s" : ""}`,
+        ]
+          .filter(Boolean)
+          .join(" and ");
+        if (!confirm(`Remove @${id}?\n\nIt will also be taken out of ${what}.`)) return;
+      }
+
+      setFeatures((prev) => {
+        if (!(id in prev)) return prev;
+        const { [id]: _drop, ...next } = prev;
+        void putFeatures(next);
+        return next;
+      });
+      if (inSets.length) {
+        setSets((prev) => {
+          const next = { ...prev };
+          for (const s of inSets)
+            next[s] = { ...prev[s]!, features: prev[s]!.features.filter((f) => f !== id) };
+          void putFeatureSets(next);
+          return next;
+        });
+      }
+      if (pickedBy.length) {
+        setApplicable((prev) => {
+          const next: Applicable = {};
+          for (const [name, ids] of Object.entries(prev)) {
+            const kept = ids.filter((x) => x !== id);
+            if (kept.length) next[name] = kept;
+          }
+          void putApplicable(next);
+          return next;
+        });
+      }
+      if (links) {
+        flash(
+          `@${id} is still written in ${links} note${links > 1 ? "s" : ""} — edit those to drop it for good`,
+          4500,
+        );
+      }
+    },
+    [sets, applicable, perDoc, flash],
+  );
 
   // ---- feature sets ------------------------------------------------------
 

@@ -177,13 +177,22 @@ button, input, textarea { font: inherit; color: inherit; }
 
 /* ---- feature strip ---- */
 /* What this payload is supposed to support, in front of you while you annotate rather
-   than a tab away. One line, scrolls sideways, never wraps the tree off the screen. */
+   than a tab away. One line, scrolls sideways, never wraps the tree off the screen.
+
+   Only the chips scroll — same split as the tab bar, and for the same reason: an
+   overflow container clips both axes, so a dropdown inside one loses its bottom. `pick`
+   also sits hard right rather than trailing the chips, so it is in the same place every
+   time and its menu has a fixed edge to hang from. */
 .fstrip {
   display: flex; align-items: center; gap: 6px; flex: none;
   padding: 5px 10px; border-bottom: 1px solid var(--line);
-  background: var(--bg); overflow-x: auto; scrollbar-width: none;
+  background: var(--bg); position: relative; z-index: 20;
 }
-.fstrip::-webkit-scrollbar { display: none; }
+.fstrip-scroll {
+  display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;
+  overflow-x: auto; scrollbar-width: none;
+}
+.fstrip-scroll::-webkit-scrollbar { display: none; }
 .fstrip-hint { color: var(--dim); opacity: .7; }
 .chip {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
@@ -204,7 +213,8 @@ button, input, textarea { font: inherit; color: inherit; }
 .c-covered { color: var(--str); border-color: color-mix(in srgb, var(--str) 35%, var(--line)); }
 .chip.pick { border-style: dashed; cursor: pointer; background: none; }
 .chip.pick:hover, .chip.pick.on { color: var(--fg); border-color: var(--dim); }
-.pickmenu { left: 0; right: auto; max-height: 60vh; overflow-y: auto; }
+/* Hangs off the right edge, which `pick` is pinned to — see .fstrip. */
+.pickmenu { max-height: 60vh; overflow-y: auto; }
 .pick-h {
   padding: 6px 9px 2px; color: var(--dim); font-size: var(--fs-xs);
   text-transform: uppercase; letter-spacing: .09em;
