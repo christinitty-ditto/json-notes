@@ -199,9 +199,24 @@ and it makes search, filter, and the header counts operations on that one array.
 
 **Payloads**
 
-38. Added by the `+` button or by dragging JSON files onto the window; a whole-window
+38. Added by the `+` button or by dragging files onto the window; a whole-window
     overlay shows the drop target.
+38a. Or pasted: `⌘V` anywhere, `p`, or **Paste JSON…** in the `⋯` menu. A sample response
+    arrives in a chat window or a terminal at least as often as it arrives as a file, and
+    making it a file first is busywork. The box says what it read — shape, and any repair
+    — before anything is stored, so a paste is confirmed rather than committed blind.
+38b. Extension is not a test of anything. `.txt`, `.log`, no extension: what decides is
+    whether JSON can be read out of it. Only media is refused outright, and only to avoid
+    reading a video into a string to discover it is not JSON.
+38c. The reading is deliberately tolerant, in this order: valid JSON verbatim, then a
+    trimmed BOM or `)]}'` guard, then comments and trailing commas dropped, then every
+    complete value pulled out of the text around it — a shell prompt, a log prefix — with
+    several values read as one array, which is what an NDJSON capture is. Each step names
+    what it did and the name is shown on add. A payload that was already valid is stored
+    unchanged; only a repaired one is re-serialized.
 39. Dropping a name that already exists replaces the payload and keeps its annotations.
+    A trailing `.json`, `.txt` or `.log` is dropped from the name, so the same response
+    saved twice under different extensions is one payload rather than two.
 40. `✕` on a tab removes a payload; its notes are kept so adding it again restores them.
 41. A payload that fails to parse is reported, not fatal.
 

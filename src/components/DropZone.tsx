@@ -5,6 +5,8 @@ type Props = {
   children: React.ReactNode;
 };
 
+const MEDIA = /^(image|video|audio|font)\//;
+
 /**
  * Whole-window drop target. Uses a counter rather than a boolean because dragenter and
  * dragleave both fire as the pointer crosses child elements.
@@ -39,9 +41,11 @@ export function DropZone({ onFiles, children }: Props) {
       if (!e.dataTransfer?.types.includes("Files")) return;
       e.preventDefault();
       reset();
-      const files = [...e.dataTransfer.files].filter(
-        (f) => f.name.toLowerCase().endsWith(".json") || f.type === "application/json",
-      );
+      // Extension is not the test — a captured response is as likely to be `.txt`, a
+      // log, or a file with no extension at all, and the parse is what decides whether
+      // there is JSON in it. Media is the one thing filtered out, because reading a
+      // video into a string to find out it is not JSON helps nobody.
+      const files = [...e.dataTransfer.files].filter((f) => !MEDIA.test(f.type));
       if (files.length) onFiles(files);
     };
 
@@ -63,9 +67,10 @@ export function DropZone({ onFiles, children }: Props) {
       {over && (
         <div className="dropzone">
           <div className="dropzone-box">
-            <div className="dropzone-title">Drop JSON payloads</div>
+            <div className="dropzone-title">Drop payloads</div>
             <div className="dropzone-sub">
-              Same name replaces the payload and keeps its annotations
+              Any extension — the JSON is found inside. Same name replaces the payload
+              and keeps its annotations.
             </div>
           </div>
         </div>

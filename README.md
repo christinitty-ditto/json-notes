@@ -21,8 +21,17 @@ and you can verify that in devtools rather than taking it on trust.
 That matters because a sample response captured from a real endpoint usually carries
 real customer data.
 
-Add payloads with the **`+`** button or by dragging JSON files anywhere onto the window.
-Dropping a file whose name matches an existing payload replaces it and **keeps every
+Add payloads with the **`+`** button, by dragging files anywhere onto the window, or by
+pressing **`⌘V`** to paste a response straight in — a sample usually arrives in a chat
+window or a terminal, not as a file.
+
+The extension does not matter. A `.txt`, a `.log`, a file with no extension at all: the
+JSON is found inside whatever wraps it — a shell prompt above it, a timestamp in front of
+it, `//` comments and trailing commas in it, or one record per line, which is read as an
+array. Whatever had to be repaired to read it is reported when the payload is added,
+rather than fixed behind your back. Anything already valid is stored byte for byte.
+
+Dropping or pasting a name that matches an existing payload replaces it and **keeps every
 annotation**, which is what you want when a partner sends a fresher sample. `✕` on a tab
 removes a payload; its notes are kept, so adding it again restores them.
 
