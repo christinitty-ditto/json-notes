@@ -29,8 +29,10 @@ import {
   storageInfo,
   type StorageInfo,
 } from "./store.ts";
+import { parseLoose } from "./parse.ts";
 import { DEMO_NAME, DEMO_PAYLOAD } from "./demo.ts";
 import { DropZone } from "./components/DropZone.tsx";
+import { PasteBox } from "./components/PasteBox.tsx";
 import { Header } from "./components/Header.tsx";
 import { Breadcrumb } from "./components/Breadcrumb.tsx";
 import { TreeView } from "./components/TreeView.tsx";
@@ -77,6 +79,8 @@ export function App() {
   /** Node id to land the cursor on once the rows have rebuilt around it. */
   const [pending, setPending] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  /** Seed text for the paste box, or null when it is closed. */
+  const [pasting, setPasting] = useState<string | null>(null);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [persistPrompt, setPersistPrompt] = useState<PersistPrompt | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -160,25 +164,32 @@ export function App() {
     setPersistPrompt(null);
   }, []);
 
-  const onDrop = useCallback(
-    async (files: File[]) => {
+  /**
+   * The one way in, whatever the source — a dropped file, the file picker, a paste.
+   * Reading is the tolerant one, so a response saved as `.txt` or copied out of a log
+   * lands the same as a clean `.json`, and anything that had to be repaired to read it
+   * is said out loud rather than fixed behind your back.
+   */
+  const ingest = useCallback(
+    async (items: { name: string; text: string }[]) => {
       const added: string[] = [];
       const failed: string[] = [];
+      const repairs: string[] = [];
       let imported = 0;
 
-      for (const f of files) {
-        const text = await f.text();
+      for (const it of items) {
         try {
-          // A dropped export bundle is restored rather than treated as a payload.
-          const parsed = JSON.parse(text);
-          if (isBundle(parsed)) {
-            const r = await importBundle(parsed);
+          const read = parseLoose(it.text);
+          // An export bundle is restored rather than treated as a payload.
+          if (isBundle(read.value)) {
+            const r = await importBundle(read.value);
             imported += r.notes;
             continue;
           }
-          added.push(await putPayload(f.name, text));
+          added.push(await putPayload(it.name, read.text));
+          if (read.repaired) repairs.push(read.repaired);
         } catch (e) {
-          failed.push(`${f.name}: ${(e as Error).message}`);
+          failed.push(`${it.name}: ${(e as Error).message}`);
         }
       }
 
@@ -189,10 +200,55 @@ export function App() {
       }
       if (failed.length) flash(`${failed.length} rejected — ${failed[0]}`, 5000);
       else if (imported) flash(`imported ${imported} annotations`);
+      else if (repairs.length) flash(`added ${added.join(", ")} — ${repairs[0]}`, 4000);
       else flash(`added ${added.join(", ")}`);
     },
     [refresh, flash],
   );
+
+  const onDrop = useCallback(
+    async (files: File[]) => {
+      // Read one at a time: a drop can be a folder's worth of large samples.
+      const items: { name: string; text: string }[] = [];
+      for (const f of files) items.push({ name: f.name, text: await f.text() });
+      return ingest(items);
+    },
+    [ingest],
+  );
+
+  const onPasteAdd = useCallback(
+    (name: string, text: string) => {
+      setPasting(null);
+      void ingest([{ name, text }]);
+    },
+    [ingest],
+  );
+
+  /**
+   * ⌘V anywhere. A sample response usually arrives in a chat window or a terminal, and
+   * making it a file first is busywork. Typing is left alone, and so is text with no
+   * JSON anywhere in it — the box opens only for something worth opening it for.
+   */
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (pasting !== null) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable))
+        return;
+      const files = [...(e.clipboardData?.files ?? [])];
+      if (files.length) {
+        e.preventDefault();
+        void onDrop(files);
+        return;
+      }
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      if (!/[{[]/.test(text)) return;
+      e.preventDefault();
+      setPasting(text);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [pasting, onDrop]);
 
   const onRemove = useCallback(
     async (name: string) => {
@@ -552,6 +608,13 @@ export function App() {
     const typing =
       el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
 
+    // The paste box owns the keyboard while it is up. Its own handler takes Escape
+    // when focus is inside it; this catches the case where focus is not.
+    if (pasting !== null) {
+      if (!typing && e.key === "Escape") setPasting(null);
+      return;
+    }
+
     if (typing) {
       if (e.key === "Escape") {
         el!.blur();
@@ -665,6 +728,9 @@ export function App() {
           onCopy(row.path);
         }
         return;
+      case "p":
+        e.preventDefault();
+        return setPasting("");
       case "/":
         e.preventDefault();
         searchRef.current?.focus();
@@ -935,11 +1001,21 @@ export function App() {
 
           <div className="empty-drop" onClick={() => fileRef.current?.click()}>
             <div className="empty-plus">+</div>
-            <div>Drop a JSON payload here, or click to choose one</div>
-            <div className="hint">An exported bundle dropped here is restored instead</div>
+            <div>Drop a payload here, or click to choose one</div>
+            <div className="hint">
+              Any extension — <code>.json</code>, <code>.txt</code>, a log — the JSON is
+              found inside it. An exported bundle dropped here is restored instead.
+            </div>
           </div>
           <p className="try">
-            Nothing to hand?{" "}
+            No file to hand?{" "}
+            <button className="linkish" onClick={() => setPasting("")}>
+              paste JSON straight in
+            </button>
+            {" — or press ⌘V anywhere."}
+          </p>
+          <p className="try">
+            Nothing at all?{" "}
             <button className="linkish" onClick={() => void loadDemo()}>
               load a sample payload
             </button>
@@ -958,7 +1034,6 @@ export function App() {
           <input
             ref={fileRef}
             type="file"
-            accept=".json,application/json"
             multiple
             hidden
             onChange={(e) => {
@@ -973,6 +1048,14 @@ export function App() {
             </p>
           ))}
         </div>
+        {pasting !== null && (
+          <PasteBox
+            seed={pasting}
+            taken={docs.map((d) => d.name)}
+            onAdd={onPasteAdd}
+            onClose={() => setPasting(null)}
+          />
+        )}
         {toast && <div className="toast">{toast}</div>}
       </DropZone>
     );
@@ -1007,7 +1090,7 @@ export function App() {
         ))}
         <button
           className="tab tab-add"
-          title="Add a payload — or just drag JSON files onto the window"
+          title="Add a payload — or drag files onto the window, or paste JSON with ⌘V"
           onClick={() => fileRef.current?.click()}
         >
           +
@@ -1035,8 +1118,13 @@ export function App() {
             items={[
               {
                 label: "Open files…",
-                hint: "or drag them in",
+                hint: "any extension",
                 onClick: () => fileRef.current?.click(),
+              },
+              {
+                label: "Paste JSON…",
+                hint: "⌘V",
+                onClick: () => setPasting(""),
               },
               // Once the question has been answered it lives here, so the explanation is
               // always reachable rather than gone the moment the notice is dismissed.
@@ -1061,7 +1149,6 @@ export function App() {
           <input
             ref={fileRef}
             type="file"
-            accept=".json,application/json"
             multiple
             hidden
             onChange={(e) => {
@@ -1162,6 +1249,7 @@ export function App() {
             <span><b>⏎</b> note</span>
             <span><b>y</b> copy path</span>
             <span><b>/</b> search</span>
+            <span><b>p</b> paste</span>
             <span><b>[ ]</b> tabs</span>
           </div>
         </>
@@ -1174,6 +1262,14 @@ export function App() {
         </div>
       ) : null}
 
+      {pasting !== null && (
+        <PasteBox
+          seed={pasting}
+          taken={docs.map((d) => d.name)}
+          onAdd={onPasteAdd}
+          onClose={() => setPasting(null)}
+        />
+      )}
       {toast && <div className="toast">{toast}</div>}
     </div>
     </DropZone>

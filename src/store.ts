@@ -63,12 +63,20 @@ const kvDel = (key: string) => tx(KV, "readwrite", (s) => s.delete(key));
 
 const notesKey = (name: string) => `notes:${name}`;
 
-/** Payload names come from filenames; keep them flat and predictable. */
+/**
+ * Payload names come from filenames; keep them flat and predictable. A trailing
+ * extension is dropped so the same response saved as `.json`, `.txt` or `.log` lands on
+ * one name — and so re-adding it replaces the payload and keeps its annotations, which
+ * is the whole point of the name. Only the extensions a payload actually arrives under
+ * are listed: `api.v2` is a name, not a file type.
+ */
+const EXT = /\.(json|jsonc|json5|ndjson|txt|text|log|har|dat|out|resp|response)$/i;
+
 export function slug(name: string): string {
   return (
     name
       .replace(/^.*[\\/]/, "")
-      .replace(/\.json$/i, "")
+      .replace(EXT, "")
       .replace(/[^\w.\-]+/g, "-")
       .replace(/^[-.]+|[-.]+$/g, "")
       .slice(0, 120) || "payload"

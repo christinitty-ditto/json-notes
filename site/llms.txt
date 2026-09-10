@@ -9,6 +9,10 @@ and you have to work out the meaning of several hundred fields by reading a samp
 
 ## What it does
 
+- Takes a payload from a dropped file of any extension, the file picker, or `⌘V` pasted
+  straight into the page. JSON is read out of whatever wraps it — a `curl` transcript, a
+  log line, comments and trailing commas, or one record per line — and what had to be
+  repaired is reported rather than applied silently.
 - Renders a payload as a tree and lets you write a note against **any** key, including
   container keys, so a whole section can be described at its root.
 - Three marks per key: `*` interesting, `?` open question, `–` ignore. Marking a
